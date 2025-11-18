@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 #
-# map-reduce tests
+# map-reduce tests (adapted to bin/ + bin/plugins/ + data/pg/)
 #
 
 # un-comment this to run the tests with the Go race detector.
@@ -28,7 +28,6 @@ maybe_quiet() {
     fi
 }
 
-
 TIMEOUT=timeout
 TIMEOUT2=""
 if timeout 2s sleep 1 > /dev/null 2>&1
@@ -51,26 +50,38 @@ then
   TIMEOUT+=" -k 2s 45s "
 fi
 
-# run the test in a fresh sub-directory.
-rm -rf mr-tmp
-mkdir mr-tmp || exit 1
-cd mr-tmp || exit 1
+# root/bin/plugins setup
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BIN_DIR="${ROOT_DIR}/bin"
+PLUGIN_DIR="${BIN_DIR}/plugins"
+
+mkdir -p "${BIN_DIR}" "${PLUGIN_DIR}"
+
+# test working directory under tmp/
+TMP_ROOT="${ROOT_DIR}/tmp"
+WORKDIR="${TMP_ROOT}/mr-tmp"
+
+rm -rf "$WORKDIR"
+mkdir -p "$WORKDIR" || exit 1
+cd "$WORKDIR" || exit 1
 rm -f mr-*
 
 # make sure software is freshly built.
-(cd ../../mrapps && go clean)
-(cd .. && go clean)
-(cd ../../mrapps && go build $RACE -buildmode=plugin wc.go) || exit 1
-(cd ../../mrapps && go build $RACE -buildmode=plugin indexer.go) || exit 1
-(cd ../../mrapps && go build $RACE -buildmode=plugin mtiming.go) || exit 1
-(cd ../../mrapps && go build $RACE -buildmode=plugin rtiming.go) || exit 1
-(cd ../../mrapps && go build $RACE -buildmode=plugin jobcount.go) || exit 1
-(cd ../../mrapps && go build $RACE -buildmode=plugin early_exit.go) || exit 1
-(cd ../../mrapps && go build $RACE -buildmode=plugin crash.go) || exit 1
-(cd ../../mrapps && go build $RACE -buildmode=plugin nocrash.go) || exit 1
-(cd .. && go build $RACE mrcoordinator.go) || exit 1
-(cd .. && go build $RACE mrworker.go) || exit 1
-(cd .. && go build $RACE mrsequential.go) || exit 1
+( cd "${ROOT_DIR}/apps" && go clean )
+( cd "${ROOT_DIR}" && go clean )
+
+( cd "${ROOT_DIR}/apps" && go build $RACE -buildmode=plugin -o "${PLUGIN_DIR}/wc.so"          wc.go ) || exit 1
+( cd "${ROOT_DIR}/apps" && go build $RACE -buildmode=plugin -o "${PLUGIN_DIR}/indexer.so"     indexer.go ) || exit 1
+( cd "${ROOT_DIR}/apps" && go build $RACE -buildmode=plugin -o "${PLUGIN_DIR}/mtiming.so"     mtiming.go ) || exit 1
+( cd "${ROOT_DIR}/apps" && go build $RACE -buildmode=plugin -o "${PLUGIN_DIR}/rtiming.so"     rtiming.go ) || exit 1
+( cd "${ROOT_DIR}/apps" && go build $RACE -buildmode=plugin -o "${PLUGIN_DIR}/jobcount.so"    jobcount.go ) || exit 1
+( cd "${ROOT_DIR}/apps" && go build $RACE -buildmode=plugin -o "${PLUGIN_DIR}/early_exit.so"  early_exit.go ) || exit 1
+( cd "${ROOT_DIR}/apps" && go build $RACE -buildmode=plugin -o "${PLUGIN_DIR}/crash.so"       crash.go ) || exit 1
+( cd "${ROOT_DIR}/apps" && go build $RACE -buildmode=plugin -o "${PLUGIN_DIR}/nocrash.so"     nocrash.go ) || exit 1
+
+go build $RACE -o "${BIN_DIR}/mrcoordinator" "${ROOT_DIR}/cmd/mrcoordinator.go" || exit 1
+go build $RACE -o "${BIN_DIR}/mrworker"      "${ROOT_DIR}/cmd/mrworker.go"      || exit 1
+go build $RACE -o "${BIN_DIR}/mrsequential"  "${ROOT_DIR}/cmd/mrsequential.go"  || exit 1
 
 failed_any=0
 
@@ -78,22 +89,22 @@ failed_any=0
 # first word-count
 
 # generate the correct output
-../mrsequential ../../mrapps/wc.so ../pg*txt || exit 1
+"${BIN_DIR}/mrsequential" "${PLUGIN_DIR}/wc.so" "${ROOT_DIR}/data/pg/pg"*".txt" || exit 1
 sort mr-out-0 > mr-correct-wc.txt
 rm -f mr-out*
 
 echo '***' Starting wc test.
 
-maybe_quiet $TIMEOUT ../mrcoordinator ../pg*txt &
+maybe_quiet $TIMEOUT "${BIN_DIR}/mrcoordinator" "${ROOT_DIR}/data/pg/pg"*".txt" &
 pid=$!
 
 # give the coordinator time to create the sockets.
 sleep 1
 
 # start multiple workers.
-(maybe_quiet $TIMEOUT ../mrworker ../../mrapps/wc.so) &
-(maybe_quiet $TIMEOUT ../mrworker ../../mrapps/wc.so) &
-(maybe_quiet $TIMEOUT ../mrworker ../../mrapps/wc.so) &
+(maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/wc.so") &
+(maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/wc.so") &
+(maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/wc.so") &
 
 # wait for the coordinator to exit.
 wait $pid
@@ -118,18 +129,18 @@ wait
 rm -f mr-*
 
 # generate the correct output
-../mrsequential ../../mrapps/indexer.so ../pg*txt || exit 1
+"${BIN_DIR}/mrsequential" "${PLUGIN_DIR}/indexer.so" "${ROOT_DIR}/data/pg/pg"*".txt" || exit 1
 sort mr-out-0 > mr-correct-indexer.txt
 rm -f mr-out*
 
 echo '***' Starting indexer test.
 
-maybe_quiet $TIMEOUT ../mrcoordinator ../pg*txt &
+maybe_quiet $TIMEOUT "${BIN_DIR}/mrcoordinator" "${ROOT_DIR}/data/pg/pg"*".txt" &
 sleep 1
 
 # start multiple workers
-maybe_quiet $TIMEOUT ../mrworker ../../mrapps/indexer.so &
-maybe_quiet $TIMEOUT ../mrworker ../../mrapps/indexer.so
+maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/indexer.so" &
+maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/indexer.so"
 
 sort mr-out* | grep . > mr-indexer-all
 if cmp mr-indexer-all mr-correct-indexer.txt
@@ -148,11 +159,11 @@ echo '***' Starting map parallelism test.
 
 rm -f mr-*
 
-maybe_quiet $TIMEOUT ../mrcoordinator ../pg*txt &
+maybe_quiet $TIMEOUT "${BIN_DIR}/mrcoordinator" "${ROOT_DIR}/data/pg/pg"*".txt" &
 sleep 1
 
-maybe_quiet $TIMEOUT ../mrworker ../../mrapps/mtiming.so &
-maybe_quiet $TIMEOUT ../mrworker ../../mrapps/mtiming.so
+maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/mtiming.so" &
+maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/mtiming.so"
 
 NT=`cat mr-out* | grep '^times-' | wc -l | sed 's/ //g'`
 if [ "$NT" != "2" ]
@@ -173,17 +184,16 @@ fi
 
 wait
 
-
 #########################################################
 echo '***' Starting reduce parallelism test.
 
 rm -f mr-*
 
-maybe_quiet $TIMEOUT ../mrcoordinator ../pg*txt &
+maybe_quiet $TIMEOUT "${BIN_DIR}/mrcoordinator" "${ROOT_DIR}/data/pg/pg"*".txt" &
 sleep 1
 
-maybe_quiet $TIMEOUT ../mrworker ../../mrapps/rtiming.so  &
-maybe_quiet $TIMEOUT ../mrworker ../../mrapps/rtiming.so
+maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/rtiming.so"  &
+maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/rtiming.so"
 
 NT=`cat mr-out* | grep '^[a-z] 2' | wc -l | sed 's/ //g'`
 if [ "$NT" -lt "2" ]
@@ -202,13 +212,13 @@ echo '***' Starting job count test.
 
 rm -f mr-*
 
-maybe_quiet $TIMEOUT ../mrcoordinator ../pg*txt  &
+maybe_quiet $TIMEOUT "${BIN_DIR}/mrcoordinator" "${ROOT_DIR}/data/pg/pg"*".txt"  &
 sleep 1
 
-maybe_quiet $TIMEOUT ../mrworker ../../mrapps/jobcount.so &
-maybe_quiet $TIMEOUT ../mrworker ../../mrapps/jobcount.so
-maybe_quiet $TIMEOUT ../mrworker ../../mrapps/jobcount.so &
-maybe_quiet $TIMEOUT ../mrworker ../../mrapps/jobcount.so
+maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/jobcount.so" &
+maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/jobcount.so"
+maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/jobcount.so" &
+maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/jobcount.so"
 
 NT=`cat mr-out* | awk '{print $2}'`
 if [ "$NT" -eq "8" ]
@@ -223,8 +233,7 @@ fi
 wait
 
 #########################################################
-# test whether any worker or coordinator exits before the
-# task has completed (i.e., all output files have been finalized)
+# early exit test
 rm -f mr-*
 
 echo '***' Starting early exit test.
@@ -232,43 +241,31 @@ echo '***' Starting early exit test.
 DF=anydone$$
 rm -f $DF
 
-(maybe_quiet $TIMEOUT ../mrcoordinator ../pg*txt; touch $DF) &
+(maybe_quiet $TIMEOUT "${BIN_DIR}/mrcoordinator" "${ROOT_DIR}/data/pg/pg"*".txt"; touch $DF) &
 
-# give the coordinator time to create the sockets.
 sleep 1
 
-# start multiple workers.
-(maybe_quiet $TIMEOUT ../mrworker ../../mrapps/early_exit.so; touch $DF) &
-(maybe_quiet $TIMEOUT ../mrworker ../../mrapps/early_exit.so; touch $DF) &
-(maybe_quiet $TIMEOUT ../mrworker ../../mrapps/early_exit.so; touch $DF) &
+(maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/early_exit.so"; touch $DF) &
+(maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/early_exit.so"; touch $DF) &
+(maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/early_exit.so"; touch $DF) &
 
-# wait for any of the coord or workers to exit.
-# `jobs` ensures that any completed old processes from other tests
-# are not waited upon.
 jobs &> /dev/null
 if [[ "$OSTYPE" = "darwin"* ]]
 then
-  # bash on the Mac doesn't have wait -n
   while [ ! -e $DF ]
   do
     sleep 0.2
   done
 else
-  # the -n causes wait to wait for just one child process,
-  # rather than waiting for all to finish.
   wait -n
 fi
 
 rm -f $DF
 
-# a process has exited. this means that the output should be finalized
-# otherwise, either a worker or the coordinator exited early
 sort mr-out* | grep . > mr-wc-all-initial
 
-# wait for remaining workers and coordinator to exit.
 wait
 
-# compare initial and final outputs
 sort mr-out* | grep . > mr-wc-all-final
 if cmp mr-wc-all-final mr-wc-all-initial
 then
@@ -284,41 +281,39 @@ rm -f mr-*
 echo '***' Starting crash test.
 
 # generate the correct output
-../mrsequential ../../mrapps/nocrash.so ../pg*txt || exit 1
+"${BIN_DIR}/mrsequential" "${PLUGIN_DIR}/nocrash.so" "${ROOT_DIR}/data/pg/pg"*".txt" || exit 1
 sort mr-out-0 > mr-correct-crash.txt
 rm -f mr-out*
 
 rm -f mr-done
-((maybe_quiet $TIMEOUT2 ../mrcoordinator ../pg*txt); touch mr-done ) &
+((maybe_quiet $TIMEOUT2 "${BIN_DIR}/mrcoordinator" "${ROOT_DIR}/data/pg/pg"*".txt"); touch mr-done ) &
 sleep 1
 
-# start multiple workers
-maybe_quiet $TIMEOUT2 ../mrworker ../../mrapps/crash.so &
+maybe_quiet $TIMEOUT2 "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/crash.so" &
 
-# mimic rpc.go's coordinatorSock()
 SOCKNAME=/var/tmp/5840-mr-`id -u`
 
 ( while [ -e $SOCKNAME -a ! -f mr-done ]
   do
-    maybe_quiet $TIMEOUT2 ../mrworker ../../mrapps/crash.so
+    maybe_quiet $TIMEOUT2 "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/crash.so"
     sleep 1
   done ) &
 
 ( while [ -e $SOCKNAME -a ! -f mr-done ]
   do
-    maybe_quiet $TIMEOUT2 ../mrworker ../../mrapps/crash.so
+    maybe_quiet $TIMEOUT2 "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/crash.so"
     sleep 1
   done ) &
 
 while [ -e $SOCKNAME -a ! -f mr-done ]
 do
-  maybe_quiet $TIMEOUT2 ../mrworker ../../mrapps/crash.so
+  maybe_quiet $TIMEOUT2 "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/crash.so"
   sleep 1
 done
 
 wait
 
-rm $SOCKNAME
+rm -f $SOCKNAME
 sort mr-out* | grep . > mr-crash-all
 if cmp mr-crash-all mr-correct-crash.txt
 then
