@@ -50,6 +50,13 @@ then
   TIMEOUT+=" -k 2s 45s "
 fi
 
+NREDUCE=10
+JOB_ID="test"
+COORD_ADDR="127.0.0.1:8000"
+
+COORDINATOR_ARGS=(-n-reduce="${NREDUCE}" -job-id="${JOB_ID}")
+WORKER_ARGS=(-coord-addr="${COORD_ADDR}")
+
 # root/bin/plugins setup
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BIN_DIR="${ROOT_DIR}/bin"
@@ -95,16 +102,16 @@ rm -f mr-out*
 
 echo '***' Starting wc test.
 
-maybe_quiet $TIMEOUT "${BIN_DIR}/mrcoordinator" "${ROOT_DIR}/data/pg/pg"*".txt" &
+maybe_quiet $TIMEOUT "${BIN_DIR}/mrcoordinator" "${COORDINATOR_ARGS[@]}" "${ROOT_DIR}/data/pg/pg"*".txt" &
 pid=$!
 
 # give the coordinator time to create the sockets.
 sleep 1
 
 # start multiple workers.
-(maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/wc.so") &
-(maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/wc.so") &
-(maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/wc.so") &
+(maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${WORKER_ARGS[@]}" -app="${PLUGIN_DIR}/wc.so") &
+(maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${WORKER_ARGS[@]}" -app="${PLUGIN_DIR}/wc.so") &
+(maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${WORKER_ARGS[@]}" -app="${PLUGIN_DIR}/wc.so") &
 
 # wait for the coordinator to exit.
 wait $pid
@@ -135,12 +142,12 @@ rm -f mr-out*
 
 echo '***' Starting indexer test.
 
-maybe_quiet $TIMEOUT "${BIN_DIR}/mrcoordinator" "${ROOT_DIR}/data/pg/pg"*".txt" &
+maybe_quiet $TIMEOUT "${BIN_DIR}/mrcoordinator" "${COORDINATOR_ARGS[@]}" "${ROOT_DIR}/data/pg/pg"*".txt" &
 sleep 1
 
 # start multiple workers
-maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/indexer.so" &
-maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/indexer.so"
+maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${WORKER_ARGS[@]}" -app="${PLUGIN_DIR}/indexer.so" &
+maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${WORKER_ARGS[@]}" -app="${PLUGIN_DIR}/indexer.so"
 
 sort mr-out* | grep . > mr-indexer-all
 if cmp mr-indexer-all mr-correct-indexer.txt
@@ -159,11 +166,11 @@ echo '***' Starting map parallelism test.
 
 rm -f mr-*
 
-maybe_quiet $TIMEOUT "${BIN_DIR}/mrcoordinator" "${ROOT_DIR}/data/pg/pg"*".txt" &
+maybe_quiet $TIMEOUT "${BIN_DIR}/mrcoordinator" "${COORDINATOR_ARGS[@]}" "${ROOT_DIR}/data/pg/pg"*".txt" &
 sleep 1
 
-maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/mtiming.so" &
-maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/mtiming.so"
+maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${WORKER_ARGS[@]}" -app="${PLUGIN_DIR}/mtiming.so" &
+maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${WORKER_ARGS[@]}" -app="${PLUGIN_DIR}/mtiming.so"
 
 NT=`cat mr-out* | grep '^times-' | wc -l | sed 's/ //g'`
 if [ "$NT" != "2" ]
@@ -189,11 +196,11 @@ echo '***' Starting reduce parallelism test.
 
 rm -f mr-*
 
-maybe_quiet $TIMEOUT "${BIN_DIR}/mrcoordinator" "${ROOT_DIR}/data/pg/pg"*".txt" &
+maybe_quiet $TIMEOUT "${BIN_DIR}/mrcoordinator" "${COORDINATOR_ARGS[@]}" "${ROOT_DIR}/data/pg/pg"*".txt" &
 sleep 1
 
-maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/rtiming.so"  &
-maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/rtiming.so"
+maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${WORKER_ARGS[@]}" -app="${PLUGIN_DIR}/rtiming.so"  &
+maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${WORKER_ARGS[@]}" -app="${PLUGIN_DIR}/rtiming.so"
 
 NT=`cat mr-out* | grep '^[a-z] 2' | wc -l | sed 's/ //g'`
 if [ "$NT" -lt "2" ]
@@ -212,13 +219,13 @@ echo '***' Starting job count test.
 
 rm -f mr-*
 
-maybe_quiet $TIMEOUT "${BIN_DIR}/mrcoordinator" "${ROOT_DIR}/data/pg/pg"*".txt"  &
+maybe_quiet $TIMEOUT "${BIN_DIR}/mrcoordinator" "${COORDINATOR_ARGS[@]}" "${ROOT_DIR}/data/pg/pg"*".txt"  &
 sleep 1
 
-maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/jobcount.so" &
-maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/jobcount.so"
-maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/jobcount.so" &
-maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/jobcount.so"
+maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${WORKER_ARGS[@]}" -app="${PLUGIN_DIR}/jobcount.so" &
+maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${WORKER_ARGS[@]}" -app="${PLUGIN_DIR}/jobcount.so"
+maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${WORKER_ARGS[@]}" -app="${PLUGIN_DIR}/jobcount.so" &
+maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${WORKER_ARGS[@]}" -app="${PLUGIN_DIR}/jobcount.so"
 
 NT=`cat mr-out* | awk '{print $2}'`
 if [ "$NT" -eq "8" ]
@@ -241,13 +248,13 @@ echo '***' Starting early exit test.
 DF=anydone$$
 rm -f $DF
 
-(maybe_quiet $TIMEOUT "${BIN_DIR}/mrcoordinator" "${ROOT_DIR}/data/pg/pg"*".txt"; touch $DF) &
+(maybe_quiet $TIMEOUT "${BIN_DIR}/mrcoordinator" "${COORDINATOR_ARGS[@]}" "${ROOT_DIR}/data/pg/pg"*".txt"; touch $DF) &
 
 sleep 1
 
-(maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/early_exit.so"; touch $DF) &
-(maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/early_exit.so"; touch $DF) &
-(maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/early_exit.so"; touch $DF) &
+(maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${WORKER_ARGS[@]}" -app="${PLUGIN_DIR}/early_exit.so"; touch $DF) &
+(maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${WORKER_ARGS[@]}" -app="${PLUGIN_DIR}/early_exit.so"; touch $DF) &
+(maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${WORKER_ARGS[@]}" -app="${PLUGIN_DIR}/early_exit.so"; touch $DF) &
 
 jobs &> /dev/null
 if [[ "$OSTYPE" = "darwin"* ]]
@@ -286,28 +293,28 @@ sort mr-out-0 > mr-correct-crash.txt
 rm -f mr-out*
 
 rm -f mr-done
-((maybe_quiet $TIMEOUT2 "${BIN_DIR}/mrcoordinator" "${ROOT_DIR}/data/pg/pg"*".txt"); touch mr-done ) &
+((maybe_quiet $TIMEOUT2 "${BIN_DIR}/mrcoordinator" "${COORDINATOR_ARGS[@]}" "${ROOT_DIR}/data/pg/pg"*".txt"); touch mr-done ) &
 sleep 1
 
-maybe_quiet $TIMEOUT2 "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/crash.so" &
+maybe_quiet $TIMEOUT2 "${BIN_DIR}/mrworker" "${WORKER_ARGS[@]}" -app="${PLUGIN_DIR}/crash.so" &
 
 SOCKNAME=/var/tmp/5840-mr-`id -u`
 
 ( while [ -e $SOCKNAME -a ! -f mr-done ]
   do
-    maybe_quiet $TIMEOUT2 "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/crash.so"
+    maybe_quiet $TIMEOUT2 "${BIN_DIR}/mrworker" "${WORKER_ARGS[@]}" -app="${PLUGIN_DIR}/crash.so"
     sleep 1
   done ) &
 
 ( while [ -e $SOCKNAME -a ! -f mr-done ]
   do
-    maybe_quiet $TIMEOUT2 "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/crash.so"
+    maybe_quiet $TIMEOUT2 "${BIN_DIR}/mrworker" "${WORKER_ARGS[@]}" -app="${PLUGIN_DIR}/crash.so"
     sleep 1
   done ) &
 
 while [ -e $SOCKNAME -a ! -f mr-done ]
 do
-  maybe_quiet $TIMEOUT2 "${BIN_DIR}/mrworker" "${PLUGIN_DIR}/crash.so"
+  maybe_quiet $TIMEOUT2 "${BIN_DIR}/mrworker" "${WORKER_ARGS[@]}" -app="${PLUGIN_DIR}/crash.so"
   sleep 1
 done
 

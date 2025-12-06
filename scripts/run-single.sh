@@ -7,6 +7,13 @@ if [ $# -ne 1 ]; then
     exit 1
 fi
 
+NREDUCE=10
+JOB_ID="test"
+COORD_ADDR="127.0.0.1:8000"
+
+COORDINATOR_ARGS=(-n-reduce="${NREDUCE}" -job-id="${JOB_ID}")
+WORKER_ARGS=(-coord-addr="${COORD_ADDR}")
+
 APP_ARG="$1"
 APP_BASE="${APP_ARG%.go}"       # wc.go -> wc, wc -> wc
 APP_GO="${APP_BASE}.go"         # wc -> wc.go
@@ -55,15 +62,15 @@ fi
 echo "*** Running distributed MapReduce for ${APP_BASE}"
 
 # start coordinator
-"${BIN_DIR}/mrcoordinator" "${ROOT_DIR}/data/pg/pg"*".txt" &
+"${BIN_DIR}/mrcoordinator" "${COORDINATOR_ARGS[@]}" "${ROOT_DIR}/data/pg/pg"*".txt" &
 CID=$!
 
 sleep 1
 
 # start a few workers
-"${BIN_DIR}/mrworker" "${PLUGIN_DIR}/${APP_SO}" &
-"${BIN_DIR}/mrworker" "${PLUGIN_DIR}/${APP_SO}" &
-"${BIN_DIR}/mrworker" "${PLUGIN_DIR}/${APP_SO}" &
+"${BIN_DIR}/mrworker" "${WORKER_ARGS[@]}" -app="${PLUGIN_DIR}/${APP_SO}" &
+"${BIN_DIR}/mrworker" "${WORKER_ARGS[@]}" -app="${PLUGIN_DIR}/${APP_SO}" &
+"${BIN_DIR}/mrworker" "${WORKER_ARGS[@]}" -app="${PLUGIN_DIR}/${APP_SO}" &
 
 wait "$CID" || true
 wait || true
