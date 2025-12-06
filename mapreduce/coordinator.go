@@ -67,8 +67,10 @@ type Task struct {
 }
 
 type Coordinator struct {
-	mu           sync.Mutex
-	Files        []string
+	mu    sync.Mutex
+	JobId string
+	Files []string
+
 	NMap         int
 	NReduce      int
 	CurrentPhase Phase
@@ -223,8 +225,9 @@ func (c *Coordinator) Done() bool {
 // create a Coordinator.
 // main/mrcoordinator.go calls this function.
 // nReduce is the number of reduce tasks to use.
-func MakeCoordinator(files []string, nReduce int) *Coordinator {
+func MakeCoordinator(files []string, nReduce int, jobId string) *Coordinator {
 	c := Coordinator{
+		JobId:        jobId,
 		Files:        files,
 		NMap:         len(files),
 		NReduce:      nReduce,

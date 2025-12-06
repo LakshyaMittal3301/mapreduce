@@ -11,6 +11,7 @@ package main
 //
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -20,14 +21,20 @@ import (
 )
 
 func main() {
-	if len(os.Args) != 2 {
-		fmt.Fprintf(os.Stderr, "Usage: mrworker xxx.so\n")
+
+	coordAddr := flag.String("coord-addr", "localhost:8000", "address of the coordinator")
+	app := flag.String("app", "", "path to the app/plugin (.so file)")
+	flag.Parse()
+
+	if *app == "" {
+		fmt.Fprintf(os.Stderr, "Usage: mrworker -coord-addr=<addr> -app=<plugin.so>\n")
+		flag.PrintDefaults()
 		os.Exit(1)
 	}
 
-	mapf, reducef := loadPlugin(os.Args[1])
+	mapf, reducef := loadPlugin(*app)
 
-	mr.Worker(mapf, reducef)
+	mr.Worker(mapf, reducef, *coordAddr)
 }
 
 // load the application Map and Reduce functions
