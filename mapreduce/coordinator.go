@@ -6,44 +6,10 @@ import (
 	"net"
 	"net/http"
 	"net/rpc"
-	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 )
-
-// Init Phase
-// len(files) is the number of map tasks
-// nReduce is numnber of reduce tasks
-// Job has phases: Map, Reduce, Done
-// Workers will constantly ask for tasks -> {Map, Reduce, Idle, Exit}
-
-// Task -> Map
-// 1. Assign worker a map task, along with a file, and the id (which could just be the file number (0 -> n-1))
-// 2,
-
-// Task -> Map
-// 1. Worker will ask for a task
-// 2. Assign a map task -> By sending file locations, task type, etc.
-// 3. Wait for the worker to inform whether the task is done or not, along with the location of intermediate file.
-// 4. If 10 seconds pass, assume worker is dead, and assign the task to someone else.
-// 5. Once all Map tasks are done
-
-// Task -> Reduce
-// 1. Worker will ask for a task
-// 2. Assign a map task -> By sending file locations, task type, etc.
-// 3. Wait for the worker to inform whether the task is done or not.
-// 4. If 10 seconds pass, assume worker is dead, and assign the task to someone else.
-// 5. Once all reduce tasks are done, mark the complete job done. And can return true from Done().
-
-// Keep a map of map task to status -> {idle, in-progress, completed}
-// When a GetTask request comes, iterate over the map and assign the first idle task
-// Mark it in-progress
-// Start a timer for 10s, that will check if the task is completed or not.
-// If still in-progress, mark it as idle.
-
-// When a ReportTaskDone is received, mark the task to be completed (it could either be idle or in-progress or completed, due to timeouts or multiple assignments)
-// When the status is changed from idle / in-progress to completed, increase the count of map tasks done by 1
-// If the count reaches NMap then, change the phase to Reduce tasks
 
 type Phase string
 
@@ -69,7 +35,12 @@ type Task struct {
 type Coordinator struct {
 	mu    sync.Mutex
 	JobId string
-	Files []string
+
+	ListenAddr string
+	Files      []string
+	listener   net.Listener
+	stopOnce   sync.Once
+	stopped    atomic.Bool
 
 	NMap         int
 	NReduce      int
@@ -204,14 +175,25 @@ func (c *Coordinator) markReduceTaskDone(args *ReportTaskDoneArgs) error {
 func (c *Coordinator) server() {
 	rpc.Register(c)
 	rpc.HandleHTTP()
-	//l, e := net.Listen("tcp", ":1234")
-	sockname := coordinatorSock()
-	os.Remove(sockname)
-	l, e := net.Listen("unix", sockname)
+	l, e := net.Listen("tcp", c.ListenAddr)
+	c.listener = l
+	// sockname := coordinatorSock()
+	// os.Remove(sockname)
+	// l, e := net.Listen("unix", sockname)
 	if e != nil {
 		log.Fatal("listen error:", e)
 	}
 	go http.Serve(l, nil)
+}
+
+// Stop closes the RPC listener so the port can be reused once the job ends.
+func (c *Coordinator) Stop() {
+	c.stopOnce.Do(func() {
+		if c.listener != nil {
+			_ = c.listener.Close()
+		}
+		c.stopped.Store(true)
+	})
 }
 
 // main/mrcoordinator.go calls Done() periodically to find out
@@ -225,9 +207,10 @@ func (c *Coordinator) Done() bool {
 // create a Coordinator.
 // main/mrcoordinator.go calls this function.
 // nReduce is the number of reduce tasks to use.
-func MakeCoordinator(files []string, nReduce int, jobId string) *Coordinator {
+func MakeCoordinator(files []string, nReduce int, jobId string, listenAddr string) *Coordinator {
 	c := Coordinator{
 		JobId:        jobId,
+		ListenAddr:   listenAddr,
 		Files:        files,
 		NMap:         len(files),
 		NReduce:      nReduce,

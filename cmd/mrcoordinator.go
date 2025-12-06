@@ -28,6 +28,7 @@ func main() {
 
 	nReduce := flag.Int("n-reduce", 10, "number of workers to use")
 	jobId := flag.String("job-id", "", "job identifier prefix")
+	listenAddr := flag.String("listen", ":8123", "address to listen for worker RPCs")
 
 	flag.Parse()
 
@@ -49,10 +50,11 @@ func main() {
 
 	log.Printf("Starting coordinator for job id: %s", finalJobId)
 
-	m := mr.MakeCoordinator(inputFiles, *nReduce, finalJobId)
+	m := mr.MakeCoordinator(inputFiles, *nReduce, finalJobId, *listenAddr)
 	for m.Done() == false {
 		time.Sleep(time.Second)
 	}
 
+	m.Stop()
 	time.Sleep(time.Second)
 }

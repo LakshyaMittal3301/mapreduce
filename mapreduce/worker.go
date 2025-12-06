@@ -12,22 +12,7 @@ import (
 	"time"
 )
 
-// 1. Poll the coordinator for tasks.
-
-// Map task:
-// 2. You'll get location of original filename
-// 3. Pass filename and content to map function -> []KeyValue
-// 4. For each pair, hash the key and write the key value pair to a file tmp-taskId-hash
-// 5. Once all writing is done. Change filenames in an atomic operation.
-// 6. Report Coordinator that you are done, along with intermediate file names.
-
-// Reduce task:
-// 2. You'll get the location of all intermediate files.
-// 3. Load all files to a slice of key value pairs.
-// 4. Sort the slice
-// 5. Iterate to find all pairs for a single key, and call the reduce function.
-// 6. Write to a temporary output file, and change its name once writing is done.
-// 7. Report to coordinator that task is done.
+var coordinatorAddress string
 
 // Map functions return a slice of KeyValue.
 type KeyValue struct {
@@ -46,6 +31,7 @@ func ihash(key string) int {
 // main/mrworker.go calls this function.
 func Worker(mapf func(string, string) []KeyValue,
 	reducef func(string, []string) string, coordAddr string) {
+	coordinatorAddress = coordAddr
 	for {
 
 		reply, ok := pollGetTask()
@@ -296,9 +282,9 @@ func callReportTaskDone(args ReportTaskDoneArgs) (ReportTaskDoneReply, bool) {
 // usually returns true.
 // returns false if something goes wrong.
 func call(rpcname string, args interface{}, reply interface{}) bool {
-	// c, err := rpc.DialHTTP("tcp", "127.0.0.1"+":1234")
-	sockname := coordinatorSock()
-	c, err := rpc.DialHTTP("unix", sockname)
+	c, err := rpc.DialHTTP("tcp", coordinatorAddress)
+	// sockname := coordinatorSock()
+	// c, err := rpc.DialHTTP("unix", sockname)
 	if err != nil {
 		log.Fatal("dialing:", err)
 	}

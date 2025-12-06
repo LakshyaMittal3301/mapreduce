@@ -52,9 +52,10 @@ fi
 
 NREDUCE=10
 JOB_ID="test"
-COORD_ADDR="127.0.0.1:8000"
+COORD_ADDR="localhost:8123"
+COORD_LISTEN=":8123"
 
-COORDINATOR_ARGS=(-n-reduce="${NREDUCE}" -job-id="${JOB_ID}")
+COORDINATOR_ARGS=(-n-reduce="${NREDUCE}" -job-id="${JOB_ID}" -listen="${COORD_LISTEN}")
 WORKER_ARGS=(-coord-addr="${COORD_ADDR}")
 
 # root/bin/plugins setup
@@ -298,21 +299,19 @@ sleep 1
 
 maybe_quiet $TIMEOUT2 "${BIN_DIR}/mrworker" "${WORKER_ARGS[@]}" -app="${PLUGIN_DIR}/crash.so" &
 
-SOCKNAME=/var/tmp/5840-mr-`id -u`
-
-( while [ -e $SOCKNAME -a ! -f mr-done ]
+( while [ ! -f mr-done ]
   do
     maybe_quiet $TIMEOUT2 "${BIN_DIR}/mrworker" "${WORKER_ARGS[@]}" -app="${PLUGIN_DIR}/crash.so"
     sleep 1
   done ) &
 
-( while [ -e $SOCKNAME -a ! -f mr-done ]
+( while [ ! -f mr-done ]
   do
     maybe_quiet $TIMEOUT2 "${BIN_DIR}/mrworker" "${WORKER_ARGS[@]}" -app="${PLUGIN_DIR}/crash.so"
     sleep 1
   done ) &
 
-while [ -e $SOCKNAME -a ! -f mr-done ]
+while [ ! -f mr-done ]
 do
   maybe_quiet $TIMEOUT2 "${BIN_DIR}/mrworker" "${WORKER_ARGS[@]}" -app="${PLUGIN_DIR}/crash.so"
   sleep 1
@@ -320,7 +319,6 @@ done
 
 wait
 
-rm -f $SOCKNAME
 sort mr-out* | grep . > mr-crash-all
 if cmp mr-crash-all mr-correct-crash.txt
 then

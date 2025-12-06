@@ -9,9 +9,10 @@ fi
 
 NREDUCE=10
 JOB_ID="test"
-COORD_ADDR="127.0.0.1:8000"
+COORD_ADDR="localhost:8123"
+COORD_LISTEN=":8123"
 
-COORDINATOR_ARGS=(-n-reduce="${NREDUCE}" -job-id="${JOB_ID}")
+COORDINATOR_ARGS=(-n-reduce="${NREDUCE}" -job-id="${JOB_ID}" -listen="${COORD_LISTEN}")
 WORKER_ARGS=(-coord-addr="${COORD_ADDR}")
 
 APP_ARG="$1"
