@@ -22,9 +22,10 @@ import (
 
 func main() {
 
-	coordAddr := flag.String("coord-addr", "localhost:8000", "address of the coordinator")
+	coordAddr := flag.String("coord-addr", "localhost:8123", "address of the coordinator")
 	app := flag.String("app", "", "path to the app/plugin (.so file)")
 	backend := flag.String("storage", "local", "storage backend: local|s3")
+	s3BucketFlag := flag.String("s3-bucket", "", "S3 bucket name")
 
 	flag.Parse()
 
@@ -40,6 +41,12 @@ func main() {
 	switch *backend {
 	case "local":
 		storage = mr.NewLocalStorage()
+	case "s3":
+		s3Store, err := mr.NewS3Storage(*s3BucketFlag)
+		if err != nil {
+			log.Fatalf("failed to init S3 storage: %v", err)
+		}
+		storage = s3Store
 	default:
 		log.Fatalf("unknown storage backend %s", *backend)
 	}
