@@ -26,6 +26,7 @@ func main() {
 	app := flag.String("app", "", "path to the app/plugin (.so file)")
 	backend := flag.String("storage", "local", "storage backend: local|s3")
 	s3BucketFlag := flag.String("s3-bucket", "", "S3 bucket name")
+	logLevel := flag.String("log-level", "info", "log level: info|debug")
 
 	flag.Parse()
 
@@ -50,6 +51,8 @@ func main() {
 	default:
 		log.Fatalf("unknown storage backend %s", *backend)
 	}
+
+	mr.SetLogLevel(*logLevel)
 
 	mr.Worker(mapf, reducef, *coordAddr, storage)
 }

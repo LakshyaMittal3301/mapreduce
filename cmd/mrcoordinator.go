@@ -29,6 +29,7 @@ func main() {
 	nReduce := flag.Int("n-reduce", 10, "number of workers to use")
 	jobId := flag.String("job-id", "", "job identifier prefix")
 	listenAddr := flag.String("listen", ":8123", "address to listen for worker RPCs")
+	logLevel := flag.String("log-level", "info", "log level: info|debug")
 
 	flag.Parse()
 
@@ -48,13 +49,17 @@ func main() {
 		os.Exit(1)
 	}
 
+	mr.SetLogLevel(*logLevel)
 	log.Printf("Starting coordinator for job id: %s", finalJobId)
+
+	start := time.Now()
 
 	m := mr.MakeCoordinator(inputFiles, *nReduce, finalJobId, *listenAddr)
 	for m.Done() == false {
 		time.Sleep(time.Second)
 	}
 
+	mr.Infof("Coordinator: job %s completed in %s", finalJobId, time.Since(start))
 	m.Stop()
 	time.Sleep(time.Second)
 }

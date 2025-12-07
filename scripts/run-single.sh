@@ -12,9 +12,10 @@ JOB_ID="test"
 COORD_ADDR="localhost:8123"
 COORD_LISTEN=":8123"
 COORD_PORT="8123"
+LOG_LEVEL="${LOG_LEVEL:-info}"
 
-COORDINATOR_ARGS=(-n-reduce="${NREDUCE}" -job-id="${JOB_ID}" -listen="${COORD_LISTEN}")
-WORKER_ARGS=(-coord-addr="${COORD_ADDR}")
+COORDINATOR_ARGS=(-n-reduce="${NREDUCE}" -job-id="${JOB_ID}" -listen="${COORD_LISTEN}" -log-level="${LOG_LEVEL}")
+WORKER_ARGS=(-coord-addr="${COORD_ADDR}" -log-level="${LOG_LEVEL}")
 
 kill_port_listener() {
   local pids

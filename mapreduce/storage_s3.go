@@ -53,6 +53,7 @@ func (s *S3Storage) ReadInput(filename string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("cannot read %v, err: %v", filename, err)
 	}
+	Debugf("S3Storage: read local input %s (%d bytes)", filename, len(content))
 	return string(content), nil
 }
 
@@ -76,6 +77,7 @@ func (s *S3Storage) WriteIntermediate(mapID int, nReduce int, buckets [][]KeyVal
 		if err != nil {
 			return fmt.Errorf("put S3 object %s: %w", key, err)
 		}
+		Infof("S3Storage: wrote intermediate to s3://%s/%s (map=%d reduce=%d size=%d)", s.bucket, key, mapID, r, buf.Len())
 	}
 	return nil
 }
@@ -113,6 +115,7 @@ func (s *S3Storage) ReadIntermediateForReduce(reduceID int, nMap int) ([]KeyValu
 			result = append(result, kv)
 		}
 		out.Body.Close()
+		Debugf("S3Storage: read intermediate from s3://%s/%s (%d kvs so far)", s.bucket, key, len(result))
 	}
 
 	return result, nil
@@ -137,5 +140,6 @@ func (s *S3Storage) WriteOutput(reduceID int, kvs []KeyValue) error {
 		return fmt.Errorf("put S3 object %s: %w", key, err)
 	}
 
+	Infof("S3Storage: wrote output to s3://%s/%s (%d records, %d bytes)", s.bucket, key, len(kvs), buf.Len())
 	return nil
 }

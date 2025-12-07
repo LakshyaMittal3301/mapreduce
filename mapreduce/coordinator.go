@@ -88,10 +88,12 @@ func (c *Coordinator) assignMapTask(reply *GetTaskReply) error {
 			reply.JobId = c.JobId
 			c.MapTasks[idx].Status = TaskStatusInProgress
 			c.MapTasks[idx].StartTime = time.Now()
+			Infof("Coordinator: assigned MAP task %d (file=%s) job=%s", idx, c.Files[idx], c.JobId)
 			return nil
 		}
 	}
 	reply.Type = TaskTypeIdle
+	Debugf("Coordinator: no MAP tasks available; worker idle (job=%s)", c.JobId)
 	return nil
 }
 
@@ -106,16 +108,19 @@ func (c *Coordinator) assignReduceTask(reply *GetTaskReply) error {
 			reply.JobId = c.JobId
 			c.ReduceTasks[idx].Status = TaskStatusInProgress
 			c.ReduceTasks[idx].StartTime = time.Now()
+			Infof("Coordinator: assigned REDUCE task %d job=%s", idx, c.JobId)
 			return nil
 		}
 	}
 	reply.Type = TaskTypeIdle
+	Debugf("Coordinator: no REDUCE tasks available; worker idle (job=%s)", c.JobId)
 	return nil
 }
 
 func (c *Coordinator) assignPhaseDone(reply *GetTaskReply) error {
 	if c.MapTasksDone == c.NMap && c.ReduceTasksDone == c.NReduce {
 		reply.Type = TaskTypeExit
+		Infof("Coordinator: all tasks complete; signaling exit (job=%s)", c.JobId)
 		return nil
 	}
 	return fmt.Errorf("incomplete tasks in done phase: (expected map tasks: %d, done map tasks: %d), (expected reduce tasks: %d, done reduce tasks: %d)", c.NMap, c.MapTasksDone, c.NReduce, c.ReduceTasksDone)
@@ -155,7 +160,9 @@ func (c *Coordinator) markMapTaskDone(args *ReportTaskDoneArgs) error {
 		c.MapTasksDone += 1
 		if c.MapTasksDone == c.NMap {
 			c.CurrentPhase = PhaseReduce
+			Infof("Coordinator: all MAP tasks done, moving to REDUCE (job=%s)", c.JobId)
 		}
+		Infof("Coordinator: MAP task %d completed (%d/%d) job=%s", idx, c.MapTasksDone, c.NMap, c.JobId)
 	}
 	c.MapTasks[idx].Status = TaskStatusCompleted
 	return nil
@@ -167,7 +174,9 @@ func (c *Coordinator) markReduceTaskDone(args *ReportTaskDoneArgs) error {
 		c.ReduceTasksDone += 1
 		if c.ReduceTasksDone == c.NReduce {
 			c.CurrentPhase = PhaseDone
+			Infof("Coordinator: all REDUCE tasks done (job=%s)", c.JobId)
 		}
+		Infof("Coordinator: REDUCE task %d completed (%d/%d) job=%s", idx, c.ReduceTasksDone, c.NReduce, c.JobId)
 	}
 	c.ReduceTasks[idx].Status = TaskStatusCompleted
 	return nil

@@ -42,6 +42,7 @@ func (ls *LocalStorage) ReadInput(filename string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("cannot read %v, err: %v", filename, err)
 	}
+	Debugf("LocalStorage: read input file %s (%d bytes)", filename, len(content))
 	return string(content), nil
 }
 
@@ -77,6 +78,7 @@ func (ls *LocalStorage) WriteIntermediate(mapId int, nReduce int, kva [][]KeyVal
 			_ = os.Remove(tmpFile.Name())
 			return err
 		}
+		Infof("LocalStorage: wrote intermediate file %s (map=%d reduce=%d)", finalName, mapId, r)
 	}
 	return nil
 }
@@ -107,6 +109,7 @@ func (ls *LocalStorage) ReadIntermediateForReduce(reduceId int, nMap int) ([]Key
 		}
 		file.Close()
 	}
+	Debugf("LocalStorage: read %d intermediate kvs for reduce=%d", len(kva), reduceId)
 	return kva, nil
 }
 
@@ -140,6 +143,7 @@ func (ls *LocalStorage) WriteOutput(reduceId int, kvs []KeyValue) error {
 		os.Remove(tmpFile.Name())
 		return err
 	}
+	Infof("LocalStorage: wrote output file %s (%d records)", finalName, len(kvs))
 
 	return nil
 }

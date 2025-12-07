@@ -10,6 +10,7 @@ fi
 
 APP_ARG="$1"        # e.g. wc or wc.go
 BUCKET="$2"
+LOG_LEVEL="${LOG_LEVEL:-info}"
 
 APP_BASE="${APP_ARG%.go}"   # wc.go -> wc, wc -> wc
 APP_GO="${APP_BASE}.go"     # wc -> wc.go
@@ -60,6 +61,7 @@ COORD_ADDR="localhost:8123"
   -n-reduce=10 \
   -job-id="s3test" \
   -listen=":${COORD_ADDR##*:}" \
+  -log-level="${LOG_LEVEL}" \
   "${ROOT_DIR}/data/pg/pg-"*.txt &
 CID=$!
 
@@ -72,6 +74,7 @@ for i in 1 2 3; do
     -coord-addr="${COORD_ADDR}" \
     -storage="s3" \
     -s3-bucket="${BUCKET}" \
+    -log-level="${LOG_LEVEL}" \
     -app="${PLUGINS_DIR}/${APP_SO}" &
 done
 

@@ -11,6 +11,7 @@ import (
 
 var coordinatorAddress string
 var storage Storage
+var currentJobID string
 
 // use ihash(key) % NReduce to choose the reduce
 // task number for each KeyValue emitted by Map.
@@ -35,7 +36,7 @@ func Worker(mapf func(string, string) []KeyValue,
 			return
 		}
 		if reply.Type == TaskTypeExit {
-			// log.Printf("worker: got exit task, exiting\n")
+			Debugf("Worker: got exit task for job=%s", reply.JobId)
 			return
 		}
 
@@ -69,16 +70,19 @@ func pollGetTask() (GetTaskReply, bool) {
 func handleTask(reply GetTaskReply, mapf func(string, string) []KeyValue, reducef func(string, []string) string) error {
 	var err error
 	args := ReportTaskDoneArgs{}
-	// log.Printf("Worker: setting jobId: %s\n", reply.JobId)
+	Infof("Worker: received %s task for job=%s", reply.Type, reply.JobId)
 	storage.SetJob(reply.JobId)
+	currentJobID = reply.JobId
 
 	switch reply.Type {
 	case TaskTypeMap:
+		Debugf("Worker: starting MAP task %d (file=%s) job=%s", reply.Map.ID, reply.Map.Filename, reply.JobId)
 		err = handleMapTask(reply.Map, mapf)
 		args.Type = TaskTypeMap
 		args.ID = reply.Map.ID
 
 	case TaskTypeReduce:
+		Debugf("Worker: starting REDUCE task %d job=%s", reply.Reduce.ID, reply.JobId)
 		err = handleReduceTask(reply.Reduce, reducef)
 		args.Type = TaskTypeReduce
 		args.ID = reply.Reduce.ID
@@ -95,6 +99,7 @@ func handleTask(reply GetTaskReply, mapf func(string, string) []KeyValue, reduce
 	if !ok {
 		return fmt.Errorf("error in calling report task done with args: %v", args)
 	}
+	Infof("Worker: completed %s task %d job=%s", args.Type, args.ID, reply.JobId)
 	return nil
 }
 
@@ -121,6 +126,7 @@ func handleMapTask(taskInfo *MapTaskInfo, mapf func(string, string) []KeyValue) 
 	if err != nil {
 		return err
 	}
+	Infof("Worker: finished MAP task %d (produced %d buckets) job=%s", taskInfo.ID, taskInfo.NReduce, currentJobID)
 	return nil
 }
 
@@ -158,6 +164,7 @@ func handleReduceTask(taskInfo *ReduceTaskInfo, reducef func(string, []string) s
 	if err != nil {
 		return err
 	}
+	Infof("Worker: finished REDUCE task %d (wrote %d keys) job=%s", taskInfo.ID, len(finalKV), currentJobID)
 
 	return nil
 }
