@@ -1,24 +1,16 @@
 package mr
 
 import (
-	"encoding/json"
 	"fmt"
 	"hash/fnv"
-	"io"
 	"log"
 	"net/rpc"
-	"os"
 	"sort"
 	"time"
 )
 
 var coordinatorAddress string
-
-// Map functions return a slice of KeyValue.
-type KeyValue struct {
-	Key   string
-	Value string
-}
+var storage Storage
 
 // use ihash(key) % NReduce to choose the reduce
 // task number for each KeyValue emitted by Map.
@@ -30,8 +22,10 @@ func ihash(key string) int {
 
 // main/mrworker.go calls this function.
 func Worker(mapf func(string, string) []KeyValue,
-	reducef func(string, []string) string, coordAddr string) {
+	reducef func(string, []string) string, coordAddr string, _storage Storage) {
 	coordinatorAddress = coordAddr
+	storage = _storage
+
 	for {
 
 		reply, ok := pollGetTask()
@@ -106,7 +100,7 @@ func handleMapTask(taskInfo *MapTaskInfo, mapf func(string, string) []KeyValue) 
 		return fmt.Errorf("no map task information found")
 	}
 
-	content, err := readFileContents(taskInfo.Filename)
+	content, err := storage.ReadInput(taskInfo.Filename)
 	if err != nil {
 		return err
 	}
@@ -120,54 +114,9 @@ func handleMapTask(taskInfo *MapTaskInfo, mapf func(string, string) []KeyValue) 
 		buckets[hash] = append(buckets[hash], kv)
 	}
 
-	err = writeIntermediateKeyValueToFile(buckets, taskInfo)
+	err = storage.WriteIntermediate(taskInfo.ID, taskInfo.NReduce, buckets)
 	if err != nil {
 		return err
-	}
-	return nil
-}
-
-func readFileContents(filename string) (string, error) {
-	file, err := os.Open(filename)
-	if err != nil {
-		return "", fmt.Errorf("cannot open %v, err: %v", filename, err)
-	}
-	defer file.Close()
-	content, err := io.ReadAll(file)
-	if err != nil {
-		return "", fmt.Errorf("cannot read %v, err: %v", filename, err)
-	}
-	return string(content), nil
-}
-
-func writeIntermediateKeyValueToFile(buckets [][]KeyValue, taskInfo *MapTaskInfo) error {
-	for r := range taskInfo.NReduce {
-		finalName := fmt.Sprintf("mr-%d-%d", taskInfo.ID, r)
-
-		tmpFile, err := os.CreateTemp(".", "mr-tmp-*")
-		if err != nil {
-			return err
-		}
-
-		enc := json.NewEncoder(tmpFile)
-
-		for _, kv := range buckets[r] {
-			if err := enc.Encode(&kv); err != nil {
-				tmpFile.Close()
-				_ = os.Remove(tmpFile.Name())
-				return err
-			}
-		}
-
-		if err := tmpFile.Close(); err != nil {
-			_ = os.Remove(tmpFile.Name())
-			return err
-		}
-
-		if err := os.Rename(tmpFile.Name(), finalName); err != nil {
-			_ = os.Remove(tmpFile.Name())
-			return err
-		}
 	}
 	return nil
 }
@@ -176,7 +125,8 @@ func handleReduceTask(taskInfo *ReduceTaskInfo, reducef func(string, []string) s
 	if taskInfo == nil {
 		return fmt.Errorf("worker: no reduce task information found")
 	}
-	kva, err := readKeyValueFromFiles(taskInfo)
+	kva, err := storage.ReadIntermediateForReduce(taskInfo.ID, taskInfo.NMaps)
+
 	if err != nil {
 		return err
 	}
@@ -201,65 +151,8 @@ func handleReduceTask(taskInfo *ReduceTaskInfo, reducef func(string, []string) s
 		})
 	}
 
-	err = writeFinalKeyValueToFile(finalKV, taskInfo)
+	err = storage.WriteOutput(taskInfo.ID, finalKV)
 	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func readKeyValueFromFiles(taskInfo *ReduceTaskInfo) ([]KeyValue, error) {
-	var kva []KeyValue
-
-	for m := range taskInfo.NMaps {
-		filename := fmt.Sprintf("mr-%d-%d", m, taskInfo.ID)
-		file, err := os.Open(filename)
-		if err != nil {
-			return []KeyValue{}, err
-		}
-		dec := json.NewDecoder(file)
-		for {
-			var kv KeyValue
-			if err := dec.Decode(&kv); err != nil {
-				if err == io.EOF {
-					break
-				}
-				file.Close()
-				return []KeyValue{}, err
-			}
-			kva = append(kva, kv)
-		}
-		file.Close()
-	}
-	return kva, nil
-}
-
-func writeFinalKeyValueToFile(kva []KeyValue, taskInfo *ReduceTaskInfo) error {
-	reduceId := taskInfo.ID
-	finalName := fmt.Sprintf("mr-out-%d", reduceId)
-
-	tmpFile, err := os.CreateTemp(".", "mr-out-temp-*")
-	if err != nil {
-		return err
-	}
-
-	for _, kv := range kva {
-		_, err := fmt.Fprintf(tmpFile, "%v %v\n", kv.Key, kv.Value)
-		if err != nil {
-			tmpFile.Close()
-			os.Remove(tmpFile.Name())
-			return err
-		}
-	}
-
-	if err := tmpFile.Close(); err != nil {
-		os.Remove(tmpFile.Name())
-		return err
-	}
-
-	if err := os.Rename(tmpFile.Name(), finalName); err != nil {
-		os.Remove(tmpFile.Name())
 		return err
 	}
 

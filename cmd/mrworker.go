@@ -24,6 +24,8 @@ func main() {
 
 	coordAddr := flag.String("coord-addr", "localhost:8000", "address of the coordinator")
 	app := flag.String("app", "", "path to the app/plugin (.so file)")
+	backend := flag.String("storage", "local", "storage backend: local|s3")
+
 	flag.Parse()
 
 	if *app == "" {
@@ -33,8 +35,16 @@ func main() {
 	}
 
 	mapf, reducef := loadPlugin(*app)
+	var storage mr.Storage
 
-	mr.Worker(mapf, reducef, *coordAddr)
+	switch *backend {
+	case "local":
+		storage = mr.NewLocalStorage()
+	default:
+		log.Fatalf("unknown storage backend %s", *backend)
+	}
+
+	mr.Worker(mapf, reducef, *coordAddr, storage)
 }
 
 // load the application Map and Reduce functions
