@@ -54,9 +54,34 @@ NREDUCE=10
 JOB_ID="test"
 COORD_ADDR="localhost:8123"
 COORD_LISTEN=":8123"
+COORD_PORT="8123"
 
 COORDINATOR_ARGS=(-n-reduce="${NREDUCE}" -job-id="${JOB_ID}" -listen="${COORD_LISTEN}")
 WORKER_ARGS=(-coord-addr="${COORD_ADDR}")
+
+kill_port_listener() {
+  local pids
+  pids=$(lsof -ti tcp:"${COORD_PORT}" 2>/dev/null || true)
+  if [ -n "$pids" ]; then
+    kill $pids 2>/dev/null || true
+  fi
+}
+
+cleanup() {
+  local jobs_pids
+  jobs_pids=$(jobs -p 2>/dev/null)
+  if [ -n "$jobs_pids" ]; then
+    kill $jobs_pids 2>/dev/null || true
+  fi
+  kill_port_listener
+}
+
+trap cleanup EXIT INT TERM
+kill_port_listener
+
+latest_output_dir() {
+  ls -td job/*/output 2>/dev/null | head -n1
+}
 
 # root/bin/plugins setup
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -119,8 +144,11 @@ wait $pid
 
 # since workers are required to exit when a job is completely finished,
 # and not before, that means the job has finished.
-sort mr-out* | grep . > mr-wc-all
-if cmp mr-wc-all mr-correct-wc.txt
+OUTPUT_DIR=$(latest_output_dir || true)
+if [ -n "$OUTPUT_DIR" ]; then
+  sort "${OUTPUT_DIR}"/mr-out-* | grep . > mr-wc-all
+fi
+if [ -n "$OUTPUT_DIR" ] && cmp mr-wc-all mr-correct-wc.txt
 then
   echo '---' wc test: PASS
 else
@@ -150,8 +178,11 @@ sleep 1
 maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${WORKER_ARGS[@]}" -app="${PLUGIN_DIR}/indexer.so" &
 maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${WORKER_ARGS[@]}" -app="${PLUGIN_DIR}/indexer.so"
 
-sort mr-out* | grep . > mr-indexer-all
-if cmp mr-indexer-all mr-correct-indexer.txt
+OUTPUT_DIR=$(latest_output_dir || true)
+if [ -n "$OUTPUT_DIR" ]; then
+  sort "${OUTPUT_DIR}"/mr-out-* | grep . > mr-indexer-all
+fi
+if [ -n "$OUTPUT_DIR" ] && cmp mr-indexer-all mr-correct-indexer.txt
 then
   echo '---' indexer test: PASS
 else
@@ -173,7 +204,11 @@ sleep 1
 maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${WORKER_ARGS[@]}" -app="${PLUGIN_DIR}/mtiming.so" &
 maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${WORKER_ARGS[@]}" -app="${PLUGIN_DIR}/mtiming.so"
 
-NT=`cat mr-out* | grep '^times-' | wc -l | sed 's/ //g'`
+OUTPUT_DIR=$(latest_output_dir || true)
+NT=0
+if [ -n "$OUTPUT_DIR" ]; then
+  NT=`cat "${OUTPUT_DIR}"/mr-out-* | grep '^times-' | wc -l | sed 's/ //g'`
+fi
 if [ "$NT" != "2" ]
 then
   echo '---' saw "$NT" workers rather than 2
@@ -181,7 +216,7 @@ then
   failed_any=1
 fi
 
-if cat mr-out* | grep '^parallel.* 2' > /dev/null
+if [ -n "$OUTPUT_DIR" ] && cat "${OUTPUT_DIR}"/mr-out-* | grep '^parallel.* 2' > /dev/null
 then
   echo '---' map parallelism test: PASS
 else
@@ -203,7 +238,11 @@ sleep 1
 maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${WORKER_ARGS[@]}" -app="${PLUGIN_DIR}/rtiming.so"  &
 maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${WORKER_ARGS[@]}" -app="${PLUGIN_DIR}/rtiming.so"
 
-NT=`cat mr-out* | grep '^[a-z] 2' | wc -l | sed 's/ //g'`
+OUTPUT_DIR=$(latest_output_dir || true)
+NT=0
+if [ -n "$OUTPUT_DIR" ]; then
+  NT=`cat "${OUTPUT_DIR}"/mr-out-* | grep '^[a-z] 2' | wc -l | sed 's/ //g'`
+fi
 if [ "$NT" -lt "2" ]
 then
   echo '---' too few parallel reduces.
@@ -228,7 +267,11 @@ maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${WORKER_ARGS[@]}" -app="${PLUGIN_DI
 maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${WORKER_ARGS[@]}" -app="${PLUGIN_DIR}/jobcount.so" &
 maybe_quiet $TIMEOUT "${BIN_DIR}/mrworker" "${WORKER_ARGS[@]}" -app="${PLUGIN_DIR}/jobcount.so"
 
-NT=`cat mr-out* | awk '{print $2}'`
+OUTPUT_DIR=$(latest_output_dir || true)
+NT=0
+if [ -n "$OUTPUT_DIR" ]; then
+  NT=`cat "${OUTPUT_DIR}"/mr-out-* | awk '{print $2}'`
+fi
 if [ "$NT" -eq "8" ]
 then
   echo '---' job count test: PASS
@@ -270,12 +313,18 @@ fi
 
 rm -f $DF
 
-sort mr-out* | grep . > mr-wc-all-initial
+OUTPUT_DIR=$(latest_output_dir || true)
+if [ -n "$OUTPUT_DIR" ]; then
+  sort "${OUTPUT_DIR}"/mr-out-* | grep . > mr-wc-all-initial
+fi
 
 wait
 
-sort mr-out* | grep . > mr-wc-all-final
-if cmp mr-wc-all-final mr-wc-all-initial
+OUTPUT_DIR=$(latest_output_dir || true)
+if [ -n "$OUTPUT_DIR" ]; then
+  sort "${OUTPUT_DIR}"/mr-out-* | grep . > mr-wc-all-final
+fi
+if [ -n "$OUTPUT_DIR" ] && cmp mr-wc-all-final mr-wc-all-initial
 then
   echo '---' early exit test: PASS
 else
@@ -319,8 +368,11 @@ done
 
 wait
 
-sort mr-out* | grep . > mr-crash-all
-if cmp mr-crash-all mr-correct-crash.txt
+OUTPUT_DIR=$(latest_output_dir || true)
+if [ -n "$OUTPUT_DIR" ]; then
+  sort "${OUTPUT_DIR}"/mr-out-* | grep . > mr-crash-all
+fi
+if [ -n "$OUTPUT_DIR" ] && cmp mr-crash-all mr-correct-crash.txt
 then
   echo '---' crash test: PASS
 else

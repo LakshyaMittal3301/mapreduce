@@ -11,9 +11,34 @@ NREDUCE=10
 JOB_ID="test"
 COORD_ADDR="localhost:8123"
 COORD_LISTEN=":8123"
+COORD_PORT="8123"
 
 COORDINATOR_ARGS=(-n-reduce="${NREDUCE}" -job-id="${JOB_ID}" -listen="${COORD_LISTEN}")
 WORKER_ARGS=(-coord-addr="${COORD_ADDR}")
+
+kill_port_listener() {
+  local pids
+  pids=$(lsof -ti tcp:"${COORD_PORT}" 2>/dev/null || true)
+  if [ -n "$pids" ]; then
+    kill $pids 2>/dev/null || true
+  fi
+}
+
+cleanup() {
+  local jobs_pids
+  jobs_pids=$(jobs -p 2>/dev/null || true)
+  if [ -n "$jobs_pids" ]; then
+    kill $jobs_pids 2>/dev/null || true
+  fi
+  kill_port_listener
+}
+
+trap cleanup EXIT INT TERM
+kill_port_listener
+
+latest_output_dir() {
+  ls -td job/*/output 2>/dev/null | head -n1
+}
 
 APP_ARG="$1"
 APP_BASE="${APP_ARG%.go}"       # wc.go -> wc, wc -> wc
@@ -77,8 +102,9 @@ wait "$CID" || true
 wait || true
 
 echo "*** Collecting and comparing output"
-if ls mr-out-* >/dev/null 2>&1; then
-    sort mr-out-* > mr-all
+OUTPUT_DIR=$(latest_output_dir || true)
+if [ -n "$OUTPUT_DIR" ] && ls "${OUTPUT_DIR}"/mr-out-* >/dev/null 2>&1; then
+    sort "${OUTPUT_DIR}"/mr-out-* > mr-all
     if diff -u mr-expected mr-all >/dev/null; then
         echo "RESULT: PASS (${APP_BASE})"
         exit 0
@@ -89,6 +115,6 @@ if ls mr-out-* >/dev/null 2>&1; then
         exit 1
     fi
 else
-    echo "RESULT: FAIL (${APP_BASE}) - no mr-out-* files produced"
+    echo "RESULT: FAIL (${APP_BASE}) - no job/*/output/mr-out-* files produced"
     exit 1
 fi
