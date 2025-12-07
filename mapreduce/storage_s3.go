@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"golang.org/x/sync/errgroup"
 )
 
 type S3Storage struct {
@@ -24,6 +25,8 @@ type S3Storage struct {
 	intermediatePrefix string
 	outputPrefix       string
 }
+
+const maxS3Concurrency = 16
 
 func NewS3Storage(bucket, inputPrefix string) (Storage, error) {
 	cfg, err := config.LoadDefaultConfig(context.Background())
@@ -69,66 +72,115 @@ func (s *S3Storage) ReadInput(filename string) (string, error) {
 	return string(data), nil
 }
 
-func (s *S3Storage) WriteIntermediate(mapID int, nReduce int, buckets [][]KeyValue) error {
-	for r := 0; r < nReduce; r++ {
-		key := fmt.Sprintf("%smr-%d-%d.txt", s.intermediatePrefix, mapID, r)
-
-		var buf bytes.Buffer
-		enc := json.NewEncoder(&buf)
-		for _, kv := range buckets[r] {
-			if err := enc.Encode(&kv); err != nil {
-				return fmt.Errorf("encode intermediate for map=%d reduce=%d: %w", mapID, r, err)
-			}
-		}
-
-		_, err := s.client.PutObject(context.Background(), &s3.PutObjectInput{
-			Bucket:      &s.bucket,
-			Key:         &key,
-			Body:        bytes.NewReader(buf.Bytes()),
-			ContentType: aws.String("text/plain"),
-		})
-		if err != nil {
-			return fmt.Errorf("put S3 object %s: %w", key, err)
-		}
-		Infof("S3Storage: wrote intermediate to s3://%s/%s (map=%d reduce=%d size=%d)", s.bucket, key, mapID, r, buf.Len())
+func acquire(ctx context.Context, sem chan struct{}) error {
+	select {
+	case sem <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
-	return nil
+}
+
+func release(sem chan struct{}) {
+	select {
+	case <-sem:
+	default:
+	}
+}
+
+func (s *S3Storage) WriteIntermediate(mapID int, nReduce int, buckets [][]KeyValue) error {
+	sem := make(chan struct{}, maxS3Concurrency)
+	g, ctx := errgroup.WithContext(context.Background())
+
+	for r := 0; r < nReduce; r++ {
+		r := r
+		g.Go(func() error {
+			if err := acquire(ctx, sem); err != nil {
+				return err
+			}
+			defer release(sem)
+
+			key := fmt.Sprintf("%smr-%d-%d.txt", s.intermediatePrefix, mapID, r)
+
+			var buf bytes.Buffer
+			enc := json.NewEncoder(&buf)
+			for _, kv := range buckets[r] {
+				if err := enc.Encode(&kv); err != nil {
+					return fmt.Errorf("encode intermediate for map=%d reduce=%d: %w", mapID, r, err)
+				}
+			}
+
+			_, err := s.client.PutObject(ctx, &s3.PutObjectInput{
+				Bucket:      &s.bucket,
+				Key:         &key,
+				Body:        bytes.NewReader(buf.Bytes()),
+				ContentType: aws.String("text/plain"),
+			})
+			if err != nil {
+				return fmt.Errorf("put S3 object %s: %w", key, err)
+			}
+			Infof("S3Storage: wrote intermediate to s3://%s/%s (map=%d reduce=%d size=%d)", s.bucket, key, mapID, r, buf.Len())
+			return nil
+		})
+	}
+
+	return g.Wait()
 }
 
 func (s *S3Storage) ReadIntermediateForReduce(reduceID int, nMap int) ([]KeyValue, error) {
-	var result []KeyValue
+	sem := make(chan struct{}, maxS3Concurrency)
+	g, ctx := errgroup.WithContext(context.Background())
+	perMap := make([][]KeyValue, nMap)
 
 	for m := 0; m < nMap; m++ {
-		key := fmt.Sprintf("%smr-%d-%d.txt", s.intermediatePrefix, m, reduceID)
-
-		out, err := s.client.GetObject(context.Background(), &s3.GetObjectInput{
-			Bucket: &s.bucket,
-			Key:    &key,
-		})
-		if err != nil {
-			// For now, simplest behavior: if object not found, skip.
-			// We'll treat any "no such key" as "this map produced no data for this reduce".
-			var nsk *s3types.NoSuchKey
-			if errors.As(err, &nsk) {
-				continue
+		m := m
+		g.Go(func() error {
+			if err := acquire(ctx, sem); err != nil {
+				return err
 			}
-			return nil, fmt.Errorf("get S3 object %s: %w", key, err)
-		}
+			defer release(sem)
+			key := fmt.Sprintf("%smr-%d-%d.txt", s.intermediatePrefix, m, reduceID)
 
-		dec := json.NewDecoder(out.Body)
-		for {
-			var kv KeyValue
-			if err := dec.Decode(&kv); err != nil {
-				if err == io.EOF {
-					break
+			out, err := s.client.GetObject(ctx, &s3.GetObjectInput{
+				Bucket: &s.bucket,
+				Key:    &key,
+			})
+			if err != nil {
+				// For now, simplest behavior: if object not found, skip.
+				// We'll treat any "no such key" as "this map produced no data for this reduce".
+				var nsk *s3types.NoSuchKey
+				if errors.As(err, &nsk) {
+					return nil
 				}
-				out.Body.Close()
-				return nil, fmt.Errorf("decode intermediate %s: %w", key, err)
+				return fmt.Errorf("get S3 object %s: %w", key, err)
 			}
-			result = append(result, kv)
-		}
-		out.Body.Close()
-		Debugf("S3Storage: read intermediate from s3://%s/%s (%d kvs so far)", s.bucket, key, len(result))
+			defer out.Body.Close()
+
+			dec := json.NewDecoder(out.Body)
+			var local []KeyValue
+			for {
+				var kv KeyValue
+				if err := dec.Decode(&kv); err != nil {
+					if err == io.EOF {
+						break
+					}
+					return fmt.Errorf("decode intermediate %s: %w", key, err)
+				}
+				local = append(local, kv)
+			}
+			perMap[m] = local
+			Debugf("S3Storage: read intermediate from s3://%s/%s (%d kvs)", s.bucket, key, len(local))
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
+	var result []KeyValue
+	for _, kvs := range perMap {
+		result = append(result, kvs...)
 	}
 
 	return result, nil
