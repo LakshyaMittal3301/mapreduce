@@ -10,6 +10,7 @@ fi
 
 APP_ARG="$1"        # e.g. wc or wc.go
 BUCKET="$2"
+INPUT_PREFIX="inputs/pg"
 LOG_LEVEL="${LOG_LEVEL:-info}"
 
 APP_BASE="${APP_ARG%.go}"   # wc.go -> wc, wc -> wc
@@ -53,10 +54,26 @@ else
     exit 1
 fi
 
+echo "*** Discovering input files from S3: s3://${BUCKET}/${INPUT_PREFIX}/"
+INPUT_FILES=()
+while read -r line; do
+  name=$(echo "$line" | awk '{print $4}')
+  if [ -n "$name" ]; then
+    INPUT_FILES+=("$name")
+  fi
+done < <(aws s3 ls "s3://${BUCKET}/${INPUT_PREFIX}/")
+
+if [ "${#INPUT_FILES[@]}" -eq 0 ]; then
+  echo "ERROR: no input files found in s3://${BUCKET}/${INPUT_PREFIX}/"
+  exit 1
+fi
+
+echo "*** Found ${#INPUT_FILES[@]} input files: ${INPUT_FILES[*]}"
+
 echo "*** Running distributed MapReduce with S3 backend"
 COORD_ADDR="localhost:8123"
 
-# Start coordinator (uses local files as input as usual)
+# Start coordinator (input file names come from S3 listing)
 "${BIN_DIR}/mrcoordinator" \
   -n-reduce=10 \
   -job-id="s3test" \
@@ -64,7 +81,7 @@ COORD_ADDR="localhost:8123"
   -map-timeout=30s \
   -reduce-timeout=120s \
   -log-level="${LOG_LEVEL}" \
-  "${ROOT_DIR}/data/pg/pg-"*.txt &
+  "${INPUT_FILES[@]}" &
 CID=$!
 
 # Give coordinator time to start
@@ -76,6 +93,7 @@ for i in 1 2 3; do
     -coord-addr="${COORD_ADDR}" \
     -storage="s3" \
     -s3-bucket="${BUCKET}" \
+    -s3-input-prefix="${INPUT_PREFIX}" \
     -idle-wait=1s \
     -log-level="${LOG_LEVEL}" \
     -app="${PLUGINS_DIR}/${APP_SO}" &

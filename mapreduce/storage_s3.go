@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -19,11 +19,12 @@ type S3Storage struct {
 	client *s3.Client
 
 	jobId              string
+	inputPrefix        string
 	intermediatePrefix string
 	outputPrefix       string
 }
 
-func NewS3Storage(bucket string) (Storage, error) {
+func NewS3Storage(bucket, inputPrefix string) (Storage, error) {
 	cfg, err := config.LoadDefaultConfig(context.Background())
 	if err != nil {
 		return nil, fmt.Errorf("load AWS config: %w", err)
@@ -31,9 +32,13 @@ func NewS3Storage(bucket string) (Storage, error) {
 
 	client := s3.NewFromConfig(cfg)
 
+	if inputPrefix != "" && !strings.HasSuffix(inputPrefix, "/") {
+		inputPrefix += "/"
+	}
 	return &S3Storage{
-		bucket: bucket,
-		client: client,
+		bucket:      bucket,
+		client:      client,
+		inputPrefix: inputPrefix,
 	}, nil
 }
 
@@ -44,22 +49,28 @@ func (s *S3Storage) SetJob(jobId string) {
 }
 
 func (s *S3Storage) ReadInput(filename string) (string, error) {
-	file, err := os.Open(filename)
+	key := s.inputPrefix + filename
+
+	out, err := s.client.GetObject(context.Background(), &s3.GetObjectInput{
+		Bucket: &s.bucket,
+		Key:    &key,
+	})
 	if err != nil {
-		return "", fmt.Errorf("cannot open %v, err: %v", filename, err)
+		return "", fmt.Errorf("get S3 object %s: %w", key, err)
 	}
-	defer file.Close()
-	content, err := io.ReadAll(file)
+	defer out.Body.Close()
+
+	data, err := io.ReadAll(out.Body)
 	if err != nil {
-		return "", fmt.Errorf("cannot read %v, err: %v", filename, err)
+		return "", fmt.Errorf("read S3 object %s: %w", key, err)
 	}
-	Debugf("S3Storage: read local input %s (%d bytes)", filename, len(content))
-	return string(content), nil
+	Infof("S3Storage: read input from s3://%s/%s (%d bytes)", s.bucket, key, len(data))
+	return string(data), nil
 }
 
 func (s *S3Storage) WriteIntermediate(mapID int, nReduce int, buckets [][]KeyValue) error {
 	for r := 0; r < nReduce; r++ {
-		key := fmt.Sprintf("%smr-%d-%d", s.intermediatePrefix, mapID, r)
+		key := fmt.Sprintf("%smr-%d-%d.txt", s.intermediatePrefix, mapID, r)
 
 		var buf bytes.Buffer
 		enc := json.NewEncoder(&buf)
@@ -86,7 +97,7 @@ func (s *S3Storage) ReadIntermediateForReduce(reduceID int, nMap int) ([]KeyValu
 	var result []KeyValue
 
 	for m := 0; m < nMap; m++ {
-		key := fmt.Sprintf("%smr-%d-%d", s.intermediatePrefix, m, reduceID)
+		key := fmt.Sprintf("%smr-%d-%d.txt", s.intermediatePrefix, m, reduceID)
 
 		out, err := s.client.GetObject(context.Background(), &s3.GetObjectInput{
 			Bucket: &s.bucket,
@@ -129,7 +140,7 @@ func (s *S3Storage) WriteOutput(reduceID int, kvs []KeyValue) error {
 		}
 	}
 
-	key := fmt.Sprintf("%smr-out-%d", s.outputPrefix, reduceID)
+	key := fmt.Sprintf("%smr-out-%d.txt", s.outputPrefix, reduceID)
 
 	_, err := s.client.PutObject(context.Background(), &s3.PutObjectInput{
 		Bucket: &s.bucket,

@@ -27,6 +27,7 @@ func main() {
 	app := flag.String("app", "", "path to the app/plugin (.so file)")
 	backend := flag.String("storage", "local", "storage backend: local|s3")
 	s3BucketFlag := flag.String("s3-bucket", "", "S3 bucket name")
+	s3InputPrefix := flag.String("s3-input-prefix", "inputs/pg", "S3 prefix for input files (e.g. inputs/pg)")
 	logLevel := flag.String("log-level", "info", "log level: info|debug")
 	idleWait := flag.Duration("idle-wait", 100*time.Millisecond, "worker idle poll interval")
 
@@ -50,7 +51,7 @@ func main() {
 	case "local":
 		storage = mr.NewLocalStorage()
 	case "s3":
-		s3Store, err := mr.NewS3Storage(*s3BucketFlag)
+		s3Store, err := mr.NewS3Storage(*s3BucketFlag, *s3InputPrefix)
 		if err != nil {
 			log.Fatalf("failed to init S3 storage: %v", err)
 		}
