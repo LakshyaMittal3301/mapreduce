@@ -78,7 +78,7 @@ func (c *Coordinator) GetTask(args *GetTaskArgs, reply *GetTaskReply) error {
 
 func (c *Coordinator) assignMapTask(reply *GetTaskReply) error {
 	for idx := range c.MapTasks {
-		if isTaskIdle(&c.MapTasks[idx]) {
+		if c.isTaskIdle(&c.MapTasks[idx]) {
 			reply.Type = TaskTypeMap
 			reply.Map = &MapTaskInfo{
 				ID:       idx,
@@ -99,7 +99,7 @@ func (c *Coordinator) assignMapTask(reply *GetTaskReply) error {
 
 func (c *Coordinator) assignReduceTask(reply *GetTaskReply) error {
 	for idx := range c.ReduceTasks {
-		if isTaskIdle(&c.ReduceTasks[idx]) {
+		if c.isTaskIdle(&c.ReduceTasks[idx]) {
 			reply.Type = TaskTypeReduce
 			reply.Reduce = &ReduceTaskInfo{
 				ID:    idx,
@@ -126,8 +126,16 @@ func (c *Coordinator) assignPhaseDone(reply *GetTaskReply) error {
 	return fmt.Errorf("incomplete tasks in done phase: (expected map tasks: %d, done map tasks: %d), (expected reduce tasks: %d, done reduce tasks: %d)", c.NMap, c.MapTasksDone, c.NReduce, c.ReduceTasksDone)
 }
 
-func isTaskIdle(task *Task) bool {
-	if task.Status == TaskStatusInProgress && time.Since(task.StartTime) > 10*time.Second {
+func (c *Coordinator) isTaskIdle(task *Task) bool {
+	var timeoutTimeLimit time.Duration
+	cfg := TuningConfig()
+	if c.CurrentPhase == PhaseMap {
+		timeoutTimeLimit = cfg.MapTaskTimeout
+	} else {
+		timeoutTimeLimit = cfg.ReduceTaskTimeout
+	}
+
+	if task.Status == TaskStatusInProgress && time.Since(task.StartTime) > timeoutTimeLimit {
 		task.Status = TaskStatusIdle
 	}
 	return task.Status == TaskStatusIdle

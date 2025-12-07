@@ -27,6 +27,8 @@ func Worker(mapf func(string, string) []KeyValue,
 	coordinatorAddress = coordAddr
 	storage = _storage
 
+	cfg := TuningConfig()
+
 	for {
 
 		reply, ok := pollGetTask()
@@ -43,7 +45,7 @@ func Worker(mapf func(string, string) []KeyValue,
 		err := handleTask(reply, mapf, reducef)
 		if err != nil {
 			log.Printf("worker: error occured while handling task: %v\n, sleeping!", err)
-			time.Sleep(time.Second * 2)
+			time.Sleep(cfg.WorkerIdleWait)
 			return
 		}
 	}
@@ -51,7 +53,7 @@ func Worker(mapf func(string, string) []KeyValue,
 
 func pollGetTask() (GetTaskReply, bool) {
 	args := GetTaskArgs{}
-	const idleWait = time.Millisecond * 100
+	cfg := TuningConfig()
 
 	for {
 		reply, ok := callGetTask(args)
@@ -60,7 +62,7 @@ func pollGetTask() (GetTaskReply, bool) {
 		}
 		if reply.Type == TaskTypeIdle {
 			// log.Printf("worker: Idle recieved, sleeping for: %ds\n", idleWait/time.Second)
-			time.Sleep(idleWait)
+			time.Sleep(cfg.WorkerIdleWait)
 		} else {
 			return reply, ok
 		}
@@ -108,6 +110,7 @@ func handleMapTask(taskInfo *MapTaskInfo, mapf func(string, string) []KeyValue) 
 		return fmt.Errorf("no map task information found")
 	}
 
+	start := time.Now()
 	content, err := storage.ReadInput(taskInfo.Filename)
 	if err != nil {
 		return err
@@ -126,7 +129,7 @@ func handleMapTask(taskInfo *MapTaskInfo, mapf func(string, string) []KeyValue) 
 	if err != nil {
 		return err
 	}
-	Infof("Worker: finished MAP task %d (produced %d buckets) job=%s", taskInfo.ID, taskInfo.NReduce, currentJobID)
+	Infof("[METRIC_MAP_TIME] Worker: finished MAP task %d (produced %d buckets) job=%s duration=%s", taskInfo.ID, taskInfo.NReduce, currentJobID, time.Since(start))
 	return nil
 }
 
@@ -134,6 +137,7 @@ func handleReduceTask(taskInfo *ReduceTaskInfo, reducef func(string, []string) s
 	if taskInfo == nil {
 		return fmt.Errorf("worker: no reduce task information found")
 	}
+	start := time.Now()
 	kva, err := storage.ReadIntermediateForReduce(taskInfo.ID, taskInfo.NMaps)
 
 	if err != nil {
@@ -164,7 +168,7 @@ func handleReduceTask(taskInfo *ReduceTaskInfo, reducef func(string, []string) s
 	if err != nil {
 		return err
 	}
-	Infof("Worker: finished REDUCE task %d (wrote %d keys) job=%s", taskInfo.ID, len(finalKV), currentJobID)
+	Infof("[METRIC_REDUCE_TIME] Worker: finished REDUCE task %d (wrote %d keys) job=%s duration=%s", taskInfo.ID, len(finalKV), currentJobID, time.Since(start))
 
 	return nil
 }

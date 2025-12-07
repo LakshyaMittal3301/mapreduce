@@ -16,6 +16,7 @@ import (
 	"log"
 	"os"
 	"plugin"
+	"time"
 
 	mr "github.com/LakshyaMittal3301/mapreduce/mapreduce"
 )
@@ -27,8 +28,14 @@ func main() {
 	backend := flag.String("storage", "local", "storage backend: local|s3")
 	s3BucketFlag := flag.String("s3-bucket", "", "S3 bucket name")
 	logLevel := flag.String("log-level", "info", "log level: info|debug")
+	idleWait := flag.Duration("idle-wait", 100*time.Millisecond, "worker idle poll interval")
 
 	flag.Parse()
+
+	cfg := mr.Tuning{
+		WorkerIdleWait: *idleWait,
+	}
+	mr.SetTuning(cfg)
 
 	if *app == "" {
 		fmt.Fprintf(os.Stderr, "Usage: mrworker -coord-addr=<addr> -app=<plugin.so>\n")

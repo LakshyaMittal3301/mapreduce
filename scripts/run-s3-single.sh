@@ -61,6 +61,8 @@ COORD_ADDR="localhost:8123"
   -n-reduce=10 \
   -job-id="s3test" \
   -listen=":${COORD_ADDR##*:}" \
+  -map-timeout=30s \
+  -reduce-timeout=120s \
   -log-level="${LOG_LEVEL}" \
   "${ROOT_DIR}/data/pg/pg-"*.txt &
 CID=$!
@@ -74,6 +76,7 @@ for i in 1 2 3; do
     -coord-addr="${COORD_ADDR}" \
     -storage="s3" \
     -s3-bucket="${BUCKET}" \
+    -idle-wait=1s \
     -log-level="${LOG_LEVEL}" \
     -app="${PLUGINS_DIR}/${APP_SO}" &
 done

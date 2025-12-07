@@ -14,7 +14,7 @@ const (
 )
 
 var currentLevel atomic.Int32
- 
+
 func init() {
 	currentLevel.Store(int32(levelInfo))
 }

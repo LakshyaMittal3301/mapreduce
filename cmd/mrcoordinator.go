@@ -30,8 +30,17 @@ func main() {
 	jobId := flag.String("job-id", "", "job identifier prefix")
 	listenAddr := flag.String("listen", ":8123", "address to listen for worker RPCs")
 	logLevel := flag.String("log-level", "info", "log level: info|debug")
+	mapTimeout := flag.Duration("map-timeout", 10*time.Second, "map task timeout")
+	reduceTimeout := flag.Duration("reduce-timeout", 10*time.Second, "reduce task timeout")
 
 	flag.Parse()
+
+	cfg := mr.Tuning{
+		MapTaskTimeout:    *mapTimeout,
+		ReduceTaskTimeout: *reduceTimeout,
+	}
+
+	mr.SetTuning(cfg)
 
 	unique := time.Now().UnixNano()
 
@@ -59,7 +68,7 @@ func main() {
 		time.Sleep(time.Second)
 	}
 
-	mr.Infof("Coordinator: job %s completed in %s", finalJobId, time.Since(start))
+	mr.Infof("[METRIC_JOB_TIME] Coordinator: job %s completed in %s", finalJobId, time.Since(start))
 	m.Stop()
 	time.Sleep(time.Second)
 }

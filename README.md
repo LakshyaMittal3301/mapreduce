@@ -35,10 +35,16 @@ What this script does:
 Look inside:
 
 ```
-tmp/mr-single/
+tmp/mr-single/job/<job-id>/output/
 ```
 
 You’ll see `mr-out-*`, `mr-expected`, and `mr-all`.
+
+**Common flags you can pass (optional):**
+
+* `LOG_LEVEL=debug ./run-single.sh wc` — enable debug logging (default is `info`).
+* Coordinator flags (defaulted by scripts): `-n-reduce`, `-job-id`, `-listen`, `-log-level`.
+* Worker flags (defaulted by scripts): `-coord-addr`, `-app`, `-log-level`.
 
 ---
 
@@ -73,6 +79,24 @@ Runs the full test suite 10 times.
 
 ---
 
+## 🔹 Running with S3 Storage
+
+The `scripts/run-s3-single.sh` script runs a single app using the S3 storage backend:
+
+```bash
+cd scripts
+LOG_LEVEL=debug ./run-s3-single.sh wc my-s3-bucket
+```
+
+Key flags (set by the script):
+
+* Coordinator: `-map-timeout=30s`, `-reduce-timeout=120s`, `-log-level` (default `info`, override via `LOG_LEVEL`).
+* Workers: `-storage=s3`, `-s3-bucket=<bucket>`, `-idle-wait=1s`, `-log-level` (default `info`, override via `LOG_LEVEL`).
+
+Outputs are written to `jobs/<job-id>/output/` in S3; intermediate files live under `jobs/<job-id>/intermediate/`.
+
+---
+
 ## 🔹 Where Things Live
 
 * **apps/** — MapReduce plugins (wc, indexer, custom apps)
@@ -95,4 +119,3 @@ cd scripts
 ```
 
 It will build the plugin and run everything automatically.
-
