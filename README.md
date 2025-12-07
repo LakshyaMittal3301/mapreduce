@@ -91,7 +91,7 @@ LOG_LEVEL=debug ./run-s3-single.sh wc my-s3-bucket
 Key flags (set by the script):
 
 * Coordinator: `-map-timeout=30s`, `-reduce-timeout=120s`, `-log-level` (default `info`, override via `LOG_LEVEL`).
-* Workers: `-storage=s3`, `-s3-bucket=<bucket>`, `-idle-wait=1s`, `-log-level` (default `info`, override via `LOG_LEVEL`).
+* Workers: `-storage=s3`, `-s3-bucket=<bucket>`, `-s3-input-prefix=inputs/pg`, `-s3-concurrency=16`, `-idle-wait=1s`, `-log-level` (default `info`, override via `LOG_LEVEL`).
 
 Outputs are written to `jobs/<job-id>/output/` in S3; intermediate files live under `jobs/<job-id>/intermediate/`.
 

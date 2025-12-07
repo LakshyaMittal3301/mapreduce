@@ -12,6 +12,7 @@ APP_ARG="$1"        # e.g. wc or wc.go
 BUCKET="$2"
 INPUT_PREFIX="inputs/pg"
 LOG_LEVEL="${LOG_LEVEL:-info}"
+S3_CONCURRENCY="${S3_CONCURRENCY:-16}"
 
 APP_BASE="${APP_ARG%.go}"   # wc.go -> wc, wc -> wc
 APP_GO="${APP_BASE}.go"     # wc -> wc.go
@@ -94,6 +95,7 @@ for i in 1 2 3; do
     -storage="s3" \
     -s3-bucket="${BUCKET}" \
     -s3-input-prefix="${INPUT_PREFIX}" \
+    -s3-concurrency="${S3_CONCURRENCY}" \
     -idle-wait=1s \
     -log-level="${LOG_LEVEL}" \
     -app="${PLUGINS_DIR}/${APP_SO}" &

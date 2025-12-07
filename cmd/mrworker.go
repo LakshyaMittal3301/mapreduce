@@ -28,14 +28,15 @@ func main() {
 	backend := flag.String("storage", "local", "storage backend: local|s3")
 	s3BucketFlag := flag.String("s3-bucket", "", "S3 bucket name")
 	s3InputPrefix := flag.String("s3-input-prefix", "inputs/pg", "S3 prefix for input files (e.g. inputs/pg)")
+	s3Concurrency := flag.Int("s3-concurrency", 16, "max concurrent S3 operations")
 	logLevel := flag.String("log-level", "info", "log level: info|debug")
 	idleWait := flag.Duration("idle-wait", 100*time.Millisecond, "worker idle poll interval")
 
 	flag.Parse()
 
-	cfg := mr.Tuning{
-		WorkerIdleWait: *idleWait,
-	}
+	cfg := mr.TuningConfig()
+	cfg.WorkerIdleWait = *idleWait
+	cfg.S3MaxConcurrency = *s3Concurrency
 	mr.SetTuning(cfg)
 
 	if *app == "" {

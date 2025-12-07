@@ -26,8 +26,6 @@ type S3Storage struct {
 	outputPrefix       string
 }
 
-const maxS3Concurrency = 16
-
 func NewS3Storage(bucket, inputPrefix string) (Storage, error) {
 	cfg, err := config.LoadDefaultConfig(context.Background())
 	if err != nil {
@@ -89,7 +87,11 @@ func release(sem chan struct{}) {
 }
 
 func (s *S3Storage) WriteIntermediate(mapID int, nReduce int, buckets [][]KeyValue) error {
-	sem := make(chan struct{}, maxS3Concurrency)
+	concurrency := TuningConfig().S3MaxConcurrency
+	if concurrency <= 0 {
+		concurrency = 1
+	}
+	sem := make(chan struct{}, concurrency)
 	g, ctx := errgroup.WithContext(context.Background())
 
 	for r := 0; r < nReduce; r++ {
@@ -128,7 +130,11 @@ func (s *S3Storage) WriteIntermediate(mapID int, nReduce int, buckets [][]KeyVal
 }
 
 func (s *S3Storage) ReadIntermediateForReduce(reduceID int, nMap int) ([]KeyValue, error) {
-	sem := make(chan struct{}, maxS3Concurrency)
+	concurrency := TuningConfig().S3MaxConcurrency
+	if concurrency <= 0 {
+		concurrency = 1
+	}
+	sem := make(chan struct{}, concurrency)
 	g, ctx := errgroup.WithContext(context.Background())
 	perMap := make([][]KeyValue, nMap)
 
