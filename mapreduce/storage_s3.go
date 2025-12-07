@@ -33,6 +33,7 @@ func NewS3Storage(bucket, inputPrefix string) (Storage, error) {
 	}
 
 	client := s3.NewFromConfig(cfg)
+	Infof("S3Storage: using region %q\n", cfg.Region)
 
 	if inputPrefix != "" && !strings.HasSuffix(inputPrefix, "/") {
 		inputPrefix += "/"
