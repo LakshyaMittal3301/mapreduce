@@ -5,9 +5,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 )
 
 type Storage interface {
+	SetJob(jobId string)
+
 	// Read / Write for Map tasks
 	ReadInput(filename string) (string, error)
 	WriteIntermediate(mapID int, nReduce int, kva [][]KeyValue) error
@@ -17,10 +20,16 @@ type Storage interface {
 	WriteOutput(reduceID int, kvs []KeyValue) error
 }
 
-type LocalStorage struct{}
+type LocalStorage struct {
+	jobId string
+}
 
 func NewLocalStorage() Storage {
 	return &LocalStorage{}
+}
+
+func (ls *LocalStorage) SetJob(jobId string) {
+	ls.jobId = jobId
 }
 
 func (ls *LocalStorage) ReadInput(filename string) (string, error) {
@@ -38,7 +47,11 @@ func (ls *LocalStorage) ReadInput(filename string) (string, error) {
 
 func (ls *LocalStorage) WriteIntermediate(mapId int, nReduce int, kva [][]KeyValue) error {
 	for r := range nReduce {
-		finalName := fmt.Sprintf("mr-%d-%d", mapId, r)
+		finalName := fmt.Sprintf("job/%s/intermediate/mr-%d-%d", ls.jobId, mapId, r)
+		dir := filepath.Dir(finalName)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return err
+		}
 
 		tmpFile, err := os.CreateTemp(".", "mr-tmp-*")
 		if err != nil {
@@ -72,9 +85,12 @@ func (ls *LocalStorage) ReadIntermediateForReduce(reduceId int, nMap int) ([]Key
 	var kva []KeyValue
 
 	for m := range nMap {
-		filename := fmt.Sprintf("mr-%d-%d", m, reduceId)
+		filename := fmt.Sprintf("job/%s/intermediate/mr-%d-%d", ls.jobId, m, reduceId)
 		file, err := os.Open(filename)
 		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
 			return []KeyValue{}, err
 		}
 		dec := json.NewDecoder(file)
@@ -95,7 +111,11 @@ func (ls *LocalStorage) ReadIntermediateForReduce(reduceId int, nMap int) ([]Key
 }
 
 func (ls *LocalStorage) WriteOutput(reduceId int, kvs []KeyValue) error {
-	finalName := fmt.Sprintf("mr-out-%d", reduceId)
+	finalName := fmt.Sprintf("job/%s/output/mr-out-%d", ls.jobId, reduceId)
+	dir := filepath.Dir(finalName)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
 
 	tmpFile, err := os.CreateTemp(".", "mr-out-temp-*")
 	if err != nil {

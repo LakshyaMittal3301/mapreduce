@@ -41,7 +41,7 @@ func Worker(mapf func(string, string) []KeyValue,
 
 		err := handleTask(reply, mapf, reducef)
 		if err != nil {
-			// log.Printf("worker: error occured while handling task: %v\n, sleeping!", err)
+			log.Printf("worker: error occured while handling task: %v\n, sleeping!", err)
 			time.Sleep(time.Second * 2)
 			return
 		}
@@ -69,6 +69,9 @@ func pollGetTask() (GetTaskReply, bool) {
 func handleTask(reply GetTaskReply, mapf func(string, string) []KeyValue, reducef func(string, []string) string) error {
 	var err error
 	args := ReportTaskDoneArgs{}
+	// log.Printf("Worker: setting jobId: %s\n", reply.JobId)
+	storage.SetJob(reply.JobId)
+
 	switch reply.Type {
 	case TaskTypeMap:
 		err = handleMapTask(reply.Map, mapf)

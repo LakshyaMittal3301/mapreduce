@@ -85,6 +85,7 @@ func (c *Coordinator) assignMapTask(reply *GetTaskReply) error {
 				Filename: c.Files[idx],
 				NReduce:  c.NReduce,
 			}
+			reply.JobId = c.JobId
 			c.MapTasks[idx].Status = TaskStatusInProgress
 			c.MapTasks[idx].StartTime = time.Now()
 			return nil
@@ -102,6 +103,7 @@ func (c *Coordinator) assignReduceTask(reply *GetTaskReply) error {
 				ID:    idx,
 				NMaps: c.NMap,
 			}
+			reply.JobId = c.JobId
 			c.ReduceTasks[idx].Status = TaskStatusInProgress
 			c.ReduceTasks[idx].StartTime = time.Now()
 			return nil
