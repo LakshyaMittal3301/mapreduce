@@ -9,6 +9,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
@@ -81,9 +82,10 @@ func (s *S3Storage) WriteIntermediate(mapID int, nReduce int, buckets [][]KeyVal
 		}
 
 		_, err := s.client.PutObject(context.Background(), &s3.PutObjectInput{
-			Bucket: &s.bucket,
-			Key:    &key,
-			Body:   bytes.NewReader(buf.Bytes()),
+			Bucket:      &s.bucket,
+			Key:         &key,
+			Body:        bytes.NewReader(buf.Bytes()),
+			ContentType: aws.String("text/plain"),
 		})
 		if err != nil {
 			return fmt.Errorf("put S3 object %s: %w", key, err)
@@ -143,9 +145,10 @@ func (s *S3Storage) WriteOutput(reduceID int, kvs []KeyValue) error {
 	key := fmt.Sprintf("%smr-out-%d.txt", s.outputPrefix, reduceID)
 
 	_, err := s.client.PutObject(context.Background(), &s3.PutObjectInput{
-		Bucket: &s.bucket,
-		Key:    &key,
-		Body:   bytes.NewReader(buf.Bytes()),
+		Bucket:      &s.bucket,
+		Key:         &key,
+		Body:        bytes.NewReader(buf.Bytes()),
+		ContentType: aws.String("text/plain"),
 	})
 	if err != nil {
 		return fmt.Errorf("put S3 object %s: %w", key, err)
