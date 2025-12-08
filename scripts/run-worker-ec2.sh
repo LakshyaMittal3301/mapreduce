@@ -3,26 +3,25 @@
 set -euo pipefail
 
 # Usage:
-#   ./scripts/run-workers-ec2.sh <app-name-or-go-file> <s3-bucket> <coord-addr> [num-workers]
+#   ./scripts/run-worker-ec2.sh <app-name-or-go-file> <s3-bucket> <coord-addr>
 #
 # Example:
-#   ./scripts/run-workers-ec2.sh wc mapreduce-bucket 10.0.1.23:8123 4
+#   ./scripts/run-worker-ec2.sh wc mapreduce-bucket 10.0.1.23:8123
 #
 #   app-name-or-go-file : e.g. wc or wc.go
 #   s3-bucket           : S3 bucket name (e.g. mapreduce-bucket)
 #   coord-addr          : coordinator address, e.g. 10.0.1.23:8123 or my-elastic-ip:8123
-#   num-workers         : optional, default 3
+#   num-workers         : always 1 (this script launches a single worker)
 
-if [ "$#" -lt 3 ] || [ "$#" -gt 4 ]; then
-  echo "Usage: $0 <app-name-or-go-file> <s3-bucket> <coord-addr> [num-workers]"
-  echo "Example: $0 wc mapreduce-bucket 10.0.1.23:8123 4"
+if [ "$#" -ne 3 ]; then
+  echo "Usage: $0 <app-name-or-go-file> <s3-bucket> <coord-addr>"
+  echo "Example: $0 wc mapreduce-bucket 10.0.1.23:8123"
   exit 1
 fi
 
 APP_ARG="$1"
 BUCKET="$2"
 COORD_ADDR="$3"
-NUM_WORKERS="${4:-3}"
 
 # ---- Defaults (overridable via env or by editing this script) ----
 LOG_LEVEL="${LOG_LEVEL:-info}"
@@ -55,7 +54,7 @@ echo "*** Building plugin for ${APP_GO}"
   go build -buildmode=plugin -o "${PLUGINS_DIR}/${APP_SO}" "${APP_GO}"
 )
 
-echo "*** Starting ${NUM_WORKERS} worker(s)"
+echo "*** Starting 1 worker"
 echo "  coord addr     : ${COORD_ADDR}"
 echo "  bucket         : ${BUCKET}"
 echo "  app            : ${APP_BASE}"
@@ -65,18 +64,16 @@ echo "  log level      : ${LOG_LEVEL}"
 echo "  S3 concurrency : ${S3_CONCURRENCY}"
 echo "  idle wait      : ${IDLE_WAIT}"
 
-for i in $(seq 1 "${NUM_WORKERS}"); do
-  echo "  -> launching worker #${i}"
-  "${BIN_DIR}/mrworker" \
-    -coord-addr="${COORD_ADDR}" \
-    -storage="s3" \
-    -s3-bucket="${BUCKET}" \
-    -s3-input-prefix="${S3_INPUT_PREFIX}" \
-    -s3-concurrency="${S3_CONCURRENCY}" \
-    -idle-wait="${IDLE_WAIT}" \
-    -log-level="${LOG_LEVEL}" \
-    -app="${PLUGINS_DIR}/${APP_SO}" &
-done
+echo "  -> launching worker"
+"${BIN_DIR}/mrworker" \
+  -coord-addr="${COORD_ADDR}" \
+  -storage="s3" \
+  -s3-bucket="${BUCKET}" \
+  -s3-input-prefix="${S3_INPUT_PREFIX}" \
+  -s3-concurrency="${S3_CONCURRENCY}" \
+  -idle-wait="${IDLE_WAIT}" \
+  -log-level="${LOG_LEVEL}" \
+  -app="${PLUGINS_DIR}/${APP_SO}" &
 
-echo "*** All ${NUM_WORKERS} workers started in background."
-echo "*** Use `ps aux | grep mrworker` or similar to inspect them."
+echo "*** Worker started in background."
+echo "*** Use \`ps aux | grep mrworker\` or similar to inspect it."
