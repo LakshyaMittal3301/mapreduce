@@ -27,8 +27,8 @@ INPUT_PREFIX="$4"
 
 # ---- Defaults (can be overridden via env or by editing this script) ----
 LOG_LEVEL="${LOG_LEVEL:-info}"
-MAP_TIMEOUT="${MAP_TIMEOUT:-45s}"
-REDUCE_TIMEOUT="${REDUCE_TIMEOUT:-45s}"
+MAP_TIMEOUT="${MAP_TIMEOUT:-10s}"
+REDUCE_TIMEOUT="${REDUCE_TIMEOUT:-10s}"
 LISTEN_PORT="${LISTEN_PORT:-8123}"
 LISTEN_ADDR=":${LISTEN_PORT}"
 # ------------------------------------------------------------------------
