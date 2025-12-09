@@ -34,19 +34,20 @@ func Worker(mapf func(string, string) []KeyValue,
 		reply, ok := pollGetTask()
 
 		if !ok {
-			log.Printf("worker: could not reach coordinator, exiting\n")
-			time.Sleep(1 * time.Second)
+			Infof("Worker: could not reach coordinator, sleeping for %ds", cfg.WorkerIdleWait/time.Second)
+			time.Sleep(cfg.WorkerIdleWait)
 			continue
 			// return
 		}
 		if reply.Type == TaskTypeExit {
-			Debugf("Worker: got exit task for job=%s", reply.JobId)
-			return
+			Infof("Worker: got exit task for job=%s, sleeping for %ds", reply.JobId, cfg.WorkerIdleWait/time.Second)
+			time.Sleep(cfg.WorkerIdleWait)
+			continue
 		}
 
 		err := handleTask(reply, mapf, reducef)
 		if err != nil {
-			log.Printf("worker: error occured while handling task: %v\n, sleeping!", err)
+			Infof("Worker: error occured while handling task: %v, sleeping for %ds", err, cfg.WorkerIdleWait/time.Second)
 			time.Sleep(cfg.WorkerIdleWait)
 			return
 		}

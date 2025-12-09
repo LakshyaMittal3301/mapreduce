@@ -10,8 +10,8 @@ type Tuning struct {
 }
 
 var tuning = Tuning{
-	MapTaskTimeout:    10 * time.Second, // default for local
-	ReduceTaskTimeout: 10 * time.Second, // default for local+S3
+	MapTaskTimeout:    15 * time.Second, // default for local
+	ReduceTaskTimeout: 15 * time.Second, // default for local+S3
 	WorkerIdleWait:    100 * time.Millisecond,
 	S3MaxConcurrency:  16,
 }
