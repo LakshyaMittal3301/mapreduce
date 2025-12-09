@@ -74,6 +74,16 @@ echo "  -> launching worker"
   -idle-wait="${IDLE_WAIT}" \
   -log-level="${LOG_LEVEL}" \
   -app="${PLUGINS_DIR}/${APP_SO}" &
+WORKER_PID=$!
+
+cleanup() {
+  echo "*** Stopping worker (pid ${WORKER_PID})"
+  kill "${WORKER_PID}" 2>/dev/null || true
+  wait "${WORKER_PID}" 2>/dev/null || true
+}
+
+trap cleanup INT TERM EXIT
 
 echo "*** Worker started in background."
 echo "*** Use \`ps aux | grep mrworker\` or similar to inspect it."
+wait "${WORKER_PID}"
