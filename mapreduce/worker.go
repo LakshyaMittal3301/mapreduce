@@ -34,8 +34,10 @@ func Worker(mapf func(string, string) []KeyValue,
 		reply, ok := pollGetTask()
 
 		if !ok {
-			// log.Printf("worker: could not reach coordinator, exiting\n")
-			return
+			log.Printf("worker: could not reach coordinator, exiting\n")
+			time.Sleep(1 * time.Second)
+			continue
+			// return
 		}
 		if reply.Type == TaskTypeExit {
 			Debugf("Worker: got exit task for job=%s", reply.JobId)
