@@ -29,6 +29,7 @@ func main() {
 	nReduce := flag.Int("n-reduce", 10, "number of workers to use")
 	jobId := flag.String("job-id", "", "job identifier prefix")
 	listenAddr := flag.String("listen", ":8123", "address to listen for worker RPCs")
+	appName := flag.String("app", "", "app/plugin name (e.g. wc)")
 	logLevel := flag.String("log-level", "info", "log level: info|debug")
 	mapTimeout := flag.Duration("map-timeout", 10*time.Second, "map task timeout")
 	reduceTimeout := flag.Duration("reduce-timeout", 10*time.Second, "reduce task timeout")
@@ -64,7 +65,7 @@ func main() {
 
 	start := time.Now()
 
-	m := mr.MakeCoordinator(inputFiles, *nReduce, finalJobId, *listenAddr, *s3InputPrefix)
+	m := mr.MakeCoordinator(inputFiles, *nReduce, finalJobId, *listenAddr, *s3InputPrefix, *appName)
 	for m.Done() == false {
 		time.Sleep(time.Second)
 	}

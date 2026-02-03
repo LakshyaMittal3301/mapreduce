@@ -3,10 +3,10 @@
 set -euo pipefail
 
 # Usage:
-#   ./scripts/run-coordinator-ec2.sh <n-reduce> <job-id-prefix> <s3-bucket> <input-prefix>
+#   ./scripts/run-coordinator-ec2.sh <n-reduce> <job-id-prefix> <app-name> <s3-bucket> <input-prefix>
 #
 # Example:
-#   ./scripts/run-coordinator-ec2.sh 10 wc-demo rc-mapreduce-bucket inputs/pg
+#   ./scripts/run-coordinator-ec2.sh 10 wc-demo wc rc-mapreduce-bucket inputs/pg
 #
 # It will:
 #   - List objects under s3://<bucket>/<input-prefix>/
@@ -14,16 +14,17 @@ set -euo pipefail
 #   - Listen on :8123 by default (overridable via LISTEN_PORT env var)
 #   - Use configurable defaults for log-level/map/reduce timeouts
 
-if [ "$#" -ne 4 ]; then
-  echo "Usage: $0 <n-reduce> <job-id-prefix> <s3-bucket> <input-prefix>"
-  echo "Example: $0 10 wc-demo rc-mapreduce-bucket inputs/pg"
+if [ "$#" -ne 5 ]; then
+  echo "Usage: $0 <n-reduce> <job-id-prefix> <app-name> <s3-bucket> <input-prefix>"
+  echo "Example: $0 10 wc-demo wc rc-mapreduce-bucket inputs/pg"
   exit 1
 fi
 
 NREDUCE="$1"
 JOB_PREFIX="$2"
-BUCKET="$3"
-INPUT_PREFIX="$4"
+APP_NAME="$3"
+BUCKET="$4"
+INPUT_PREFIX="$5"
 
 # ---- Defaults (can be overridden via env or by editing this script) ----
 LOG_LEVEL="${LOG_LEVEL:-info}"
@@ -77,6 +78,7 @@ echo "*** Building mrcoordinator binary"
 echo "*** Starting coordinator"
 echo "  nReduce       : ${NREDUCE}"
 echo "  job id prefix : ${JOB_PREFIX}"
+echo "  app name      : ${APP_NAME}"
 echo "  listen addr   : ${LISTEN_ADDR}"
 echo "  log level     : ${LOG_LEVEL}"
 echo "  map timeout   : ${MAP_TIMEOUT}"
@@ -89,6 +91,7 @@ echo "  input files   : ${INPUT_FILES[*]}"
   -n-reduce="${NREDUCE}" \
   -job-id="${JOB_PREFIX}" \
   -listen="${LISTEN_ADDR}" \
+  -app="${APP_NAME}" \
   -log-level="${LOG_LEVEL}" \
   -map-timeout="${MAP_TIMEOUT}" \
   -reduce-timeout="${REDUCE_TIMEOUT}" \

@@ -14,6 +14,13 @@ var coordinatorAddress string
 var storage Storage
 var currentJobID string
 
+type AppFuncs struct {
+	Mapf    func(string, string) []KeyValue
+	Reducef func(string, []string) string
+}
+
+type AppLoader func(appName string) (AppFuncs, error)
+
 // use ihash(key) % NReduce to choose the reduce
 // task number for each KeyValue emitted by Map.
 func ihash(key string) int {
@@ -23,8 +30,7 @@ func ihash(key string) int {
 }
 
 // main/mrworker.go calls this function.
-func Worker(mapf func(string, string) []KeyValue,
-	reducef func(string, []string) string, coordAddr string, _storage Storage) {
+func Worker(coordAddr string, _storage Storage, loader AppLoader) {
 	coordinatorAddress = coordAddr
 	storage = _storage
 
@@ -46,7 +52,14 @@ func Worker(mapf func(string, string) []KeyValue,
 			continue
 		}
 
-		err := handleTask(reply, mapf, reducef)
+		funcs, err := loader(reply.AppName)
+		if err != nil {
+			Infof("Worker: error loading app %q: %v, sleeping for %ds", reply.AppName, err, cfg.WorkerIdleWait/time.Second)
+			time.Sleep(cfg.WorkerIdleWait)
+			return
+		}
+
+		err = handleTask(reply, funcs.Mapf, funcs.Reducef)
 		if err != nil {
 			Infof("Worker: error occured while handling task: %v, sleeping for %ds", err, cfg.WorkerIdleWait/time.Second)
 			time.Sleep(cfg.WorkerIdleWait)

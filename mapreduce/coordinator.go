@@ -36,6 +36,7 @@ type Task struct {
 type Coordinator struct {
 	mu    sync.Mutex
 	JobId string
+	AppName string
 
 	ListenAddr string
 	Files      []string
@@ -89,6 +90,7 @@ func (c *Coordinator) assignMapTask(reply *GetTaskReply) error {
 				NReduce:     c.NReduce,
 			}
 			reply.JobId = c.JobId
+			reply.AppName = c.AppName
 			c.MapTasks[idx].Status = TaskStatusInProgress
 			c.MapTasks[idx].StartTime = time.Now()
 			Infof("Coordinator: assigned MAP task %d (file=%s) job=%s", idx, c.Files[idx], c.JobId)
@@ -109,6 +111,7 @@ func (c *Coordinator) assignReduceTask(reply *GetTaskReply) error {
 				NMaps: c.NMap,
 			}
 			reply.JobId = c.JobId
+			reply.AppName = c.AppName
 			c.ReduceTasks[idx].Status = TaskStatusInProgress
 			c.ReduceTasks[idx].StartTime = time.Now()
 			Infof("Coordinator: assigned REDUCE task %d job=%s", idx, c.JobId)
@@ -229,7 +232,7 @@ func (c *Coordinator) Done() bool {
 // create a Coordinator.
 // main/mrcoordinator.go calls this function.
 // nReduce is the number of reduce tasks to use.
-func MakeCoordinator(files []string, nReduce int, jobId string, listenAddr string, inputPrefix string) *Coordinator {
+func MakeCoordinator(files []string, nReduce int, jobId string, listenAddr string, inputPrefix string, appName string) *Coordinator {
 	// Normalize prefix so workers can safely do prefix + filename.
 	if inputPrefix != "" && !strings.HasSuffix(inputPrefix, "/") {
 		inputPrefix += "/"
@@ -237,6 +240,7 @@ func MakeCoordinator(files []string, nReduce int, jobId string, listenAddr strin
 
 	c := Coordinator{
 		JobId:        jobId,
+		AppName:      appName,
 		ListenAddr:   listenAddr,
 		Files:        files,
 		InputPrefix:  inputPrefix,

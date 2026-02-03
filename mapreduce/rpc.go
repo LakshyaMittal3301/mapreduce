@@ -32,6 +32,7 @@ type ReduceTaskInfo struct {
 
 type GetTaskReply struct {
 	JobId  string
+	AppName string
 	Type   TaskType
 	Map    *MapTaskInfo
 	Reduce *ReduceTaskInfo

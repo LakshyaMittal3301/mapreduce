@@ -14,8 +14,10 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"os"
+	"path/filepath"
 	"plugin"
+	"strings"
+	"sync"
 	"time"
 
 	mr "github.com/LakshyaMittal3301/mapreduce/mapreduce"
@@ -24,7 +26,7 @@ import (
 func main() {
 
 	coordAddr := flag.String("coord-addr", "localhost:8123", "address of the coordinator")
-	app := flag.String("app", "", "path to the app/plugin (.so file)")
+	app := flag.String("app", "", "optional default app name or plugin path (used if coordinator does not send AppName)")
 	backend := flag.String("storage", "local", "storage backend: local|s3")
 	s3BucketFlag := flag.String("s3-bucket", "", "S3 bucket name")
 	s3InputPrefix := flag.String("s3-input-prefix", "inputs/pg", "S3 prefix for input files (ignored; prefix comes from coordinator)")
@@ -39,13 +41,6 @@ func main() {
 	cfg.S3MaxConcurrency = *s3Concurrency
 	mr.SetTuning(cfg)
 
-	if *app == "" {
-		fmt.Fprintf(os.Stderr, "Usage: mrworker -coord-addr=<addr> -app=<plugin.so>\n")
-		flag.PrintDefaults()
-		os.Exit(1)
-	}
-
-	mapf, reducef := loadPlugin(*app)
 	var storage mr.Storage
 
 	switch *backend {
@@ -65,26 +60,75 @@ func main() {
 
 	mr.SetLogLevel(*logLevel)
 
-	mr.Worker(mapf, reducef, *coordAddr, storage)
+	pluginDir := filepath.Join("bin", "plugins")
+	var (
+		cacheMu sync.Mutex
+		cache   = map[string]mr.AppFuncs{}
+	)
+
+	loader := func(appName string) (mr.AppFuncs, error) {
+		path, cacheKey, err := resolvePluginPath(appName, *app, pluginDir)
+		if err != nil {
+			return mr.AppFuncs{}, err
+		}
+
+		cacheMu.Lock()
+		if funcs, ok := cache[cacheKey]; ok {
+			cacheMu.Unlock()
+			return funcs, nil
+		}
+		cacheMu.Unlock()
+
+		funcs, err := loadPlugin(path)
+		if err != nil {
+			return mr.AppFuncs{}, err
+		}
+
+		cacheMu.Lock()
+		cache[cacheKey] = funcs
+		cacheMu.Unlock()
+		return funcs, nil
+	}
+
+	mr.Worker(*coordAddr, storage, loader)
 }
 
 // load the application Map and Reduce functions
 // from a plugin file, e.g. ../mrapps/wc.so
-func loadPlugin(filename string) (func(string, string) []mr.KeyValue, func(string, []string) string) {
+func loadPlugin(filename string) (mr.AppFuncs, error) {
 	p, err := plugin.Open(filename)
 	if err != nil {
-		log.Fatalf("cannot load plugin %v", filename)
+		return mr.AppFuncs{}, fmt.Errorf("cannot load plugin %s: %w", filename, err)
 	}
 	xmapf, err := p.Lookup("Map")
 	if err != nil {
-		log.Fatalf("cannot find Map in %v", filename)
+		return mr.AppFuncs{}, fmt.Errorf("cannot find Map in %s: %w", filename, err)
 	}
-	mapf := xmapf.(func(string, string) []mr.KeyValue)
+	mapf, ok := xmapf.(func(string, string) []mr.KeyValue)
+	if !ok {
+		return mr.AppFuncs{}, fmt.Errorf("plugin %s Map has unexpected type", filename)
+	}
 	xreducef, err := p.Lookup("Reduce")
 	if err != nil {
-		log.Fatalf("cannot find Reduce in %v", filename)
+		return mr.AppFuncs{}, fmt.Errorf("cannot find Reduce in %s: %w", filename, err)
 	}
-	reducef := xreducef.(func(string, []string) string)
+	reducef, ok := xreducef.(func(string, []string) string)
+	if !ok {
+		return mr.AppFuncs{}, fmt.Errorf("plugin %s Reduce has unexpected type", filename)
+	}
 
-	return mapf, reducef
+	return mr.AppFuncs{Mapf: mapf, Reducef: reducef}, nil
+}
+
+func resolvePluginPath(appName string, defaultApp string, pluginDir string) (string, string, error) {
+	if appName == "" {
+		if defaultApp == "" {
+			return "", "", fmt.Errorf("missing app name (coordinator did not send AppName and no -app provided)")
+		}
+		if strings.HasSuffix(defaultApp, ".so") || strings.Contains(defaultApp, "/") {
+			return defaultApp, defaultApp, nil
+		}
+		return filepath.Join(pluginDir, defaultApp+".so"), defaultApp, nil
+	}
+	return filepath.Join(pluginDir, appName+".so"), appName, nil
 }
