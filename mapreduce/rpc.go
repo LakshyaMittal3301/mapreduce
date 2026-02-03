@@ -19,9 +19,10 @@ const (
 type GetTaskArgs struct{}
 
 type MapTaskInfo struct {
-	ID       int
-	Filename string
-	NReduce  int
+	ID          int
+	Filename    string
+	InputPrefix string
+	NReduce     int
 }
 
 type ReduceTaskInfo struct {

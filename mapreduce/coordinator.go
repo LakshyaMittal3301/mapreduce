@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/rpc"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -38,6 +39,7 @@ type Coordinator struct {
 
 	ListenAddr string
 	Files      []string
+	InputPrefix string
 	listener   net.Listener
 	stopOnce   sync.Once
 	stopped    atomic.Bool
@@ -81,9 +83,10 @@ func (c *Coordinator) assignMapTask(reply *GetTaskReply) error {
 		if c.isTaskIdle(&c.MapTasks[idx]) {
 			reply.Type = TaskTypeMap
 			reply.Map = &MapTaskInfo{
-				ID:       idx,
-				Filename: c.Files[idx],
-				NReduce:  c.NReduce,
+				ID:          idx,
+				Filename:    c.Files[idx],
+				InputPrefix: c.InputPrefix,
+				NReduce:     c.NReduce,
 			}
 			reply.JobId = c.JobId
 			c.MapTasks[idx].Status = TaskStatusInProgress
@@ -226,11 +229,17 @@ func (c *Coordinator) Done() bool {
 // create a Coordinator.
 // main/mrcoordinator.go calls this function.
 // nReduce is the number of reduce tasks to use.
-func MakeCoordinator(files []string, nReduce int, jobId string, listenAddr string) *Coordinator {
+func MakeCoordinator(files []string, nReduce int, jobId string, listenAddr string, inputPrefix string) *Coordinator {
+	// Normalize prefix so workers can safely do prefix + filename.
+	if inputPrefix != "" && !strings.HasSuffix(inputPrefix, "/") {
+		inputPrefix += "/"
+	}
+
 	c := Coordinator{
 		JobId:        jobId,
 		ListenAddr:   listenAddr,
 		Files:        files,
+		InputPrefix:  inputPrefix,
 		NMap:         len(files),
 		NReduce:      nReduce,
 		CurrentPhase: PhaseMap,

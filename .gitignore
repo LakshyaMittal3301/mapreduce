@@ -75,3 +75,7 @@ tmp/
 
 # Binary folder
 bin/
+
+# Docs and commands
+command.txt
+docs

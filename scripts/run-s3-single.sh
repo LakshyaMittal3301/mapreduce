@@ -82,6 +82,7 @@ COORD_ADDR="localhost:8123"
   -map-timeout=30s \
   -reduce-timeout=120s \
   -log-level="${LOG_LEVEL}" \
+  -s3-input-prefix="${INPUT_PREFIX}" \
   "${INPUT_FILES[@]}" &
 CID=$!
 

@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/rpc"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -114,7 +115,16 @@ func handleMapTask(taskInfo *MapTaskInfo, mapf func(string, string) []KeyValue) 
 	}
 
 	start := time.Now()
-	content, err := storage.ReadInput(taskInfo.Filename)
+	filename := taskInfo.Filename
+	if taskInfo.InputPrefix != "" {
+		prefix := taskInfo.InputPrefix
+		if !strings.HasSuffix(prefix, "/") {
+			prefix += "/"
+		}
+		filename = prefix + filename
+	}
+
+	content, err := storage.ReadInput(filename)
 	if err != nil {
 		return err
 	}

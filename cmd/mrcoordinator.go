@@ -32,6 +32,7 @@ func main() {
 	logLevel := flag.String("log-level", "info", "log level: info|debug")
 	mapTimeout := flag.Duration("map-timeout", 10*time.Second, "map task timeout")
 	reduceTimeout := flag.Duration("reduce-timeout", 10*time.Second, "reduce task timeout")
+	s3InputPrefix := flag.String("s3-input-prefix", "", "S3 input prefix for workers (e.g. inputs/pg)")
 
 	flag.Parse()
 
@@ -63,7 +64,7 @@ func main() {
 
 	start := time.Now()
 
-	m := mr.MakeCoordinator(inputFiles, *nReduce, finalJobId, *listenAddr)
+	m := mr.MakeCoordinator(inputFiles, *nReduce, finalJobId, *listenAddr, *s3InputPrefix)
 	for m.Done() == false {
 		time.Sleep(time.Second)
 	}

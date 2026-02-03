@@ -92,4 +92,5 @@ echo "  input files   : ${INPUT_FILES[*]}"
   -log-level="${LOG_LEVEL}" \
   -map-timeout="${MAP_TIMEOUT}" \
   -reduce-timeout="${REDUCE_TIMEOUT}" \
+  -s3-input-prefix="${INPUT_PREFIX}" \
   "${INPUT_FILES[@]}"
