@@ -14,6 +14,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
 	"path/filepath"
 	"plugin"
 	"strings"
@@ -60,7 +61,7 @@ func main() {
 
 	mr.SetLogLevel(*logLevel)
 
-	pluginDir := filepath.Join("bin", "plugins")
+	pluginDir := defaultPluginDir()
 	var (
 		cacheMu sync.Mutex
 		cache   = map[string]mr.AppFuncs{}
@@ -131,4 +132,16 @@ func resolvePluginPath(appName string, defaultApp string, pluginDir string) (str
 		return filepath.Join(pluginDir, defaultApp+".so"), defaultApp, nil
 	}
 	return filepath.Join(pluginDir, appName+".so"), appName, nil
+}
+
+func defaultPluginDir() string {
+	exePath, err := os.Executable()
+	if err == nil {
+		exeDir := filepath.Dir(exePath)
+		// If running from repo bin/ directory, plugins live at ../bin/plugins.
+		// If running from elsewhere, this still resolves relative to the binary.
+		return filepath.Clean(filepath.Join(exeDir, "..", "bin", "plugins"))
+	}
+	// Fallback to CWD-based path.
+	return filepath.Join("bin", "plugins")
 }
